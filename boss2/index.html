@@ -54,6 +54,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pad{display:grid;grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,34px);gap:4px}
 .pad button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;font-size:16px;cursor:pointer}
 .pad .u{grid-column:2;grid-row:1}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:3}.pad .r{grid-column:3;grid-row:2}.pad .ul{grid-column:1;grid-row:1}.pad .ur{grid-column:3;grid-row:1}.pad .dl{grid-column:1;grid-row:3}.pad .dr{grid-column:3;grid-row:3}
+.camwrap{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.camwrap span{margin-right:2px}
+.camwrap button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 9px;font:inherit;font-size:13px;cursor:pointer}
+.camwrap button:disabled{opacity:.4;cursor:default}
 .padwrap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 aside.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:14px;min-width:0}
 aside h2{font-family:var(--display);font-size:20px;margin:0;text-wrap:balance}
@@ -105,6 +109,11 @@ aside h3{font-size:11px;letter-spacing:.14em;color:var(--muted);margin:0 0 6px;f
       <div class="ctl">
         <button class="btn" id="startBtn">開始</button>
         <button class="btn ghost" id="resetBtn">換一組隨機</button>
+        <div class="camwrap" role="group" aria-label="視角">
+          <span>視角</span>
+          <button id="camL" aria-label="場地畫面逆時針轉 90 度">↺</button><button id="camR" aria-label="場地畫面順時針轉 90 度">↻</button>
+          <button id="camN">轉成新北</button><button id="camZ">原始方向</button>
+        </div>
         <div class="padwrap" id="padWrap">
           <div class="pad">
             <button class="ul diag" data-a="315" aria-label="面向左上">↖</button><button class="u" data-a="0" aria-label="面向上">↑</button><button class="ur diag" data-a="45" aria-label="面向右上">↗</button><button class="l" data-a="270" aria-label="面向左">←</button><button class="r" data-a="90" aria-label="面向右">→</button><button class="dl diag" data-a="225" aria-label="面向左下">↙</button><button class="d" data-a="180" aria-label="面向下">↓</button><button class="dr diag" data-a="135" aria-label="面向右下">↘</button>
@@ -137,7 +146,7 @@ const snap45=a=>((Math.round(a/45)*45)%360+360)%360;
 const gapOk=(p,r,c)=>angDiff((p.fa+p.gapOff*90)%360,angTo(p,r,c))<=TOL;
 const COLOR={T:'#4a7fe0',H:'#3fae5a',D1:'#d14b40',D2:'#d14b40'};
 const ROLE_ORDER=['T','D1','H','D2'];
-const G={role:'T',speed:1000,rotate:true,hint:false,tab:'cannon'};
+const G={role:'T',speed:1000,rotate:true,hint:false,tab:'cannon',cam:0};
 let S=null, timer=null;
 
 const $=id=>document.getElementById(id);
@@ -149,11 +158,12 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const cheb=(a,b)=>Math.max(Math.abs(a.r-b.r),Math.abs(a.c-b.c));
 function rotP(r,c,k){let x=c-2,y=r-2;for(let i=0;i<k;i++){const nx=-y,ny=x;x=nx;y=ny;}return [y+2,x+2];}
-const toS=(r,c)=>rotP(r,c,S.k);
-const toF=(r,c)=>rotP(r,c,(4-S.k)%4);
+const VK=()=>(S.k+G.cam)%4; // 畫面方向 = 機制方向 + 鏡頭旋轉
+const toS=(r,c)=>rotP(r,c,VK());
+const toF=(r,c)=>rotP(r,c,(4-VK())%4);
 function px(r,c){const [sr,sc]=toS(r,c);return [M+(sc+.5)*CELL,M+(sr+.5)*CELL];}
-const sdir=d=>(d+S.k)%4;
-const fdir=sd=>(sd-S.k+4)%4;
+const sdir=d=>(d+VK())%4;
+const fdir=sd=>(sd-VK()+4)%4;
 const net=p=>(((p.num*p.spin)%4)+4)%4;
 const spinTxt=s=>s>0?'順時針 ↻':'逆時針 ↺';
 const roman=n=>n===3?'III':'V';
@@ -183,7 +193,7 @@ function base(mode){
 }
 function light(rc){S.lit.add(key(rc[0],rc[1]));}
 function setMove(p,r,c,dur=260){p.mv={fr:p.r,fc:p.c,t0:performance.now(),dur};p.r=r;p.c=c;}
-function rotAnim(p,turns,dur){const a0=p.fa!=null?p.fa+S.k*90:sdir(p.facing)*90;p.rot={a0,a1:a0+turns*90,t0:performance.now(),dur};}
+function rotAnim(p,turns,dur){const a0=p.fa!=null?p.fa+VK()*90:sdir(p.facing)*90;p.rot={a0,a1:a0+turns*90,t0:performance.now(),dur};}
 
 /* ======================= MODES ======================= */
 const MODES={};
@@ -366,7 +376,7 @@ MODES.fire={
   hint(){const u=user();const i=this.correctSpot(u);const w=this.wantDir(i);const f=((w-net(u))%4+4)%4;
     const sh=S.players.filter(p=>p.share).map(p=>p.id).join('、');
     const why=u.stacks0===2?`（爆炸目標是 ${sh}，${S.topId} 站上排才能讓兩組各有一個目標）`:'';
-    return `新北在畫面的<b>${['上','右','下','左'][S.k]}</b>方（缺角在左下）。你 ${u.stacks0} 檔${u.share?'、爆炸目標':''} → 站「<b>${SPOTS[i].n}</b>」${why}，移動命令要往新北的${DN[w]}走；${u.num} 倍${u.spin>0?'順':'逆'}時針 = 淨轉${(u.num===5)===(u.spin>0)?'順':'逆'}時針 90°，所以倒數期間面向畫面的<b>${['上','右','下','左'][sdir(f)]}</b>。`;}
+    return `新北在畫面的<b>${['上','右','下','左'][VK()]}</b>方（缺角在左下）。你 ${u.stacks0} 檔${u.share?'、爆炸目標':''} → 站「<b>${SPOTS[i].n}</b>」${why}，移動命令要往新北的${DN[w]}走；${u.num} 倍${u.spin>0?'順':'逆'}時針 = 淨轉${(u.num===5)===(u.spin>0)?'順':'逆'}時針 90°，所以倒數期間面向畫面的<b>${['上','右','下','左'][sdir(f)]}</b>。`;}
 };
 
 /* ---- 4. 立體 ---- */
@@ -404,47 +414,70 @@ MODES.cube={
       2:'站第 3 排中間，一步都不用動：白球 1 + 第 3 排十字 1。',
       3:'站第 4 排中間，一步都不用動：白球 1 + 第 4 排十字 2。',
       4:'站第 4 排中間，吃白球和兩下十字後往後退一格到第 5 排，吃第 5 排的十字。'}[s];
-    return `新北在畫面的<b>${['上','右','下','左'][S.k]}</b>方（白球在新北的右上）。你 ${s} 層：${t}`;}
+    return `新北在畫面的<b>${['上','右','下','左'][VK()]}</b>方（白球在新北的右上）。你 ${s} 層：${t}`;}
 };
 
 /* ---- 5. 樹人 ---- */
+const SPREAD_R=1.2, PUDDLE_R=0.7, STACK_R=1.0;
 MODES.treant={
-  tab:'樹人・變換魔紋',title:'雙重爆炸・人偶召喚・變換魔紋',tick:true,obs:6,end:11,pad:false,
+  tab:'樹人・變換魔紋',title:'雙重爆炸・人偶召喚・變換魔紋',tick:true,float:true,obs:6,end:13,pad:false,
   desc:`<ul><li>以箭頭為北，三隻樹人一定在左邊：第一排一定有一隻，另外兩隻在 2、4 排或 3、5 排。樹人朝自己面向放整排直線 AOE。</li>
   <li>T、D1 上半場，H、D2 下半場，在沒有樹人的橫排待機，避開地板。</li>
-  <li>地板走到南邊後樹人放 AOE，接著鑽進樹人剛打過的橫排；地板會拐彎蓋住其他排。</li>
-  <li>兩個 DPS 帶分攤：T+D1、H+D2 二二分攤，兩組不能重疊。</li></ul>
-  <p>收尾的「地板拐彎、角落放黃圈」只有文字描述，這裡簡化成：拐彎蓋住沒有樹人的橫排，最後二二分攤。</p>`,
+  <li>地板走到南邊後樹人放 AOE，接著鑽進樹人剛打過的橫排；地板拐彎蓋住剛剛待機的排，只剩中間四格安全區。</li>
+  <li>全員分散黃圈：在安全區裡站到最遠的四個角落放圈（T 左上、D1 右上、H 左下、D2 右下），圈落地會留下黃色地板。</li>
+  <li>放完回到安全區中間：T+D1、H+D2 二二分攤（兩個 DPS 身上的分攤），兩組不能重疊。</li></ul>
+  <p>這段可以點格子裡任意位置（每拍最多走一格）。</p>`,
   setup(){
     S=base('treant');S.k=G.rotate?rnd(4):0;
     S.variant=rnd(2);S.treantRows=S.variant?[0,2,4]:[0,1,3];S.treants=S.treantRows.map(r=>({r,fired:false}));
-    S.arrows=[{r:0,c:3,d:3,start:1},{r:0,c:4,d:2,start:1},{r:0,c:1,d:2}];
+    S.arrows=[{r:0,c:3,d:3,start:1},{r:0,c:4,d:2,start:1},{r:0,c:1,d:2}];S.puddles=[];
     const starts=shuffle([[1,2],[1,3],[2,2],[2,3],[3,2],[3,3]]);
-    S.players.forEach((p,i)=>{[p.r,p.c]=starts[i];p.share=(p.id==='D1'||p.id==='D2');});
+    S.players.forEach((p,i)=>{[p.r,p.c]=starts[i];p.share=(p.id==='D1'||p.id==='D2');p.spread=false;});
     log('箭頭和樹人出現，兩個 DPS 身上有分攤。');
   },
-  rows(){return S.variant?{up:[1,2],low:[3,4]}:{up:[2,1],low:[4,3]};},
-  bot(p,t){if(t<-3)return null;const up=p.id==='T'||p.id==='D1';const R=this.rows()[up?'up':'low'];
-    return [t>=8?R[1]:R[0],(p.id==='T'||p.id==='H')?2:3];},
+  up(p){return p.id==='T'||p.id==='D1';},
+  left(p){return p.id==='T'||p.id==='H';},
+  // [待機排, 樹人打完後的安全排]
+  rows(p){const up=this.up(p);return S.variant?(up?[1,2]:[3,4]):(up?[2,1]:[4,3]);},
+  corner(p){const r=this.rows(p)[1];return [r+(this.up(p)?-.4:.4),this.left(p)?1.6:3.4];},
+  stackPos(p){return [this.rows(p)[1],this.left(p)?2.3:2.7];},
+  bot(p,t){if(t<-3)return null;
+    if(t>=12)return this.stackPos(p);
+    if(t>=9)return this.corner(p);
+    if(t>=8)return [this.rows(p)[1],this.left(p)?2:3];
+    return [this.rows(p)[0],this.left(p)?2:3];},
   events(t){const now=performance.now();
     if(t<TR_A.length)light(TR_A[t]);if(t<TR_B.length)light(TR_B[t]);
-    if(t===7){S.treants.forEach(tr=>{tr.fired=true;S.fx.push({type:'beam',r:tr.r,t0:now,dur:700});});log('樹人放直線 AOE！','info');
-      S.players.forEach(p=>{if(p.alive&&S.treantRows.includes(p.r))kill(p,'被樹人直線打中');});}
-    if(t===9){for(let r=0;r<5;r++)if(!S.treantRows.includes(r)){light([r,2]);light([r,3]);}log('地板拐彎，蓋住沒有樹人的橫排。','info');}
-    if(t===11){S.fx.push({type:'stackfx',t0:now,dur:700,both:true});
-      ['D1','D2'].forEach(id=>{const d=S.players.find(p=>p.id===id);if(!d.alive)return;
-        const g=S.players.filter(p=>p.alive&&cheb(p,d)<=1);const other=S.players.find(p=>p.id===(id==='D1'?'D2':'D1'));
-        if(other.alive&&cheb(other,d)<=1){S.overlap=true;}
-        else if(g.length<2){kill(d,'分攤只有自己吃');}
-        else if(g.length>2){log(`${id} 的分攤擠了 ${g.length} 人，不是二二分攤`,'bad');S.badSplit=true;}
-        else log(`${id} 的分攤由 ${g.map(p=>p.id).join('+')} 吃下`,'ok');});
-      if(S.overlap){log('兩組分攤重疊','bad');S.players.forEach(p=>{if(p.alive&&(cheb(p,S.players[1])<=1||cheb(p,S.players[3])<=1))kill(p,'兩組分攤疊在一起');});}}
+    if(t===7){S.treants.forEach(tr=>{tr.fired=true;S.fx.push({type:'beam',r:tr.r,t0:now,dur:700});});log('樹人放直線 AOE！鑽進樹人打過的排','info');
+      S.players.forEach(p=>{if(p.alive&&S.treantRows.includes(Math.round(p.r)))kill(p,'被樹人直線打中');});}
+    if(t===9){for(let r=0;r<5;r++)if(!S.treantRows.includes(r)){light([r,2]);light([r,3]);}
+      S.players.forEach(p=>{if(p.alive)p.spread=true;});
+      log('地板拐彎，只剩中間四格安全；全員被點分散黃圈，站到安全區最遠的角落！','info');}
+    if(t===11){
+      const alive=S.players.filter(p=>p.alive&&p.spread);
+      alive.forEach(p=>{S.fx.push({type:'spread',r:p.r,c:p.c,t0:now,dur:700});S.puddles.push({r:p.r,c:p.c});});
+      alive.forEach(p=>{alive.filter(q=>q!==p&&Math.hypot(q.r-p.r,q.c-p.c)<SPREAD_R).forEach(q=>kill(q,`被 ${p.id} 的分散黃圈波及`));});
+      alive.forEach(p=>p.spread=false);
+      log('分散黃圈落地，留下黃色地板。回安全區中間分攤！','info');}
+    if(t===13){S.fx.push({type:'stackfx',t0:now,dur:700,both:true});
+      const near=(a,b)=>Math.hypot(a.r-b.r,a.c-b.c)<=STACK_R;
+      const D=['D1','D2'].map(id=>S.players.find(p=>p.id===id));
+      if(D[0].alive&&D[1].alive&&near(D[0],D[1])){log('兩組分攤重疊','bad');
+        S.players.forEach(p=>{if(p.alive&&near(p,D[0])&&near(p,D[1]))kill(p,'兩組分攤疊在一起');});S.badSplit=true;}
+      else D.forEach(d=>{if(!d.alive)return;const g=S.players.filter(p=>p.alive&&near(p,d));
+        if(g.length<2)kill(d,'分攤只有自己吃');
+        else if(g.length>2){log(`${d.id} 的分攤擠了 ${g.length} 人，不是二二分攤`,'bad');S.badSplit=true;}
+        else log(`${d.id} 的分攤由 ${g.map(p=>p.id).join('+')} 吃下`,'ok');});}
   },
+  hazard(p,t){if(t>=12&&S.puddles.some(q=>Math.hypot(q.r-p.r,q.c-p.c)<=PUDDLE_R))kill(p,'站在黃色地板上');},
   final(){S.northLabel=true;if(S.badSplit)S.wipe=true;},
-  buffs(){const u=user();const up=u.id==='T'||u.id==='D1';return `<span class="chip">${up?'上半場':'下半場'}</span>${u.share?'<span class="chip share">分攤</span>':'<span class="chip">跟 '+(up?'D1':'D2')+' 分攤</span>'}`;},
-  status(){return tickStatus()+`<br>樹人在第 ${S.treantRows.map(r=>r+1).join('、')} 排`;},
-  hint(){const R=this.rows();const u=user();const up=u.id==='T'||u.id==='D1';const r=R[up?'up':'low'];
-    return `新北在畫面的<b>${['上','右','下','左'][S.k]}</b>方（箭頭朝向的那邊是北，樹人在左）。樹人在第 ${S.treantRows.map(x=>x+1).join('、')} 排 → 你在第 <b>${r[0]+1}</b> 排待機（中間兩格），樹人打完立刻移到第 <b>${r[1]+1}</b> 排，跟${up?'T/D1':'H/D2'}站相鄰格分攤。`;}
+  buffs(){const u=user();const up=this.up(u);return `<span class="chip">${up?'上半場':'下半場'}</span>${u.share?'<span class="chip share">分攤</span>':'<span class="chip">跟 '+(up?'D1':'D2')+' 分攤</span>'}${u.spread?'<span class="chip num">分散黃圈</span>':''}`;},
+  status(){const t=S.t;let ph='';
+    if(S.state==='run'&&t>=0){ph=t<=7?'地板前進中，樹人第 7 拍放 AOE':t<=8?'鑽進樹人打過的排':t<=11?'分散黃圈：站到安全區角落（第 11 拍落地）':'回安全區中間二二分攤（第 13 拍）';}
+    return tickStatus()+`<br>樹人在第 ${S.treantRows.map(r=>r+1).join('、')} 排${ph?'<br>'+ph:''}`;},
+  hint(){const u=user();const up=this.up(u);const [r0,r1]=this.rows(u);
+    const cname={T:'左上',D1:'右上',H:'左下',D2:'右下'}[u.id];
+    return `新北在畫面的<b>${['上','右','下','左'][VK()]}</b>方（箭頭朝向的那邊是北，樹人在左）。樹人在第 ${S.treantRows.map(x=>x+1).join('、')} 排 → 你在第 <b>${r0+1}</b> 排待機（中間兩格），樹人打完立刻移到第 <b>${r1+1}</b> 排。地板拐彎後安全區只剩第 ${Math.min(r1,this.rows({id:up?'H':'T'})[1])+1}、${Math.max(r1,this.rows({id:up?'H':'T'})[1])+1} 排的中間四格：站到你那格的<b>${cname}角</b>放黃圈，落地後回到第 ${r1+1} 排中間跟${up?'T/D1':'H/D2'}二二分攤。`;}
 };
 
 /* ======================= tick engine ======================= */
@@ -460,10 +493,11 @@ function step(){
   const m=MODES[S.mode],t=S.t;
   S.players.forEach(p=>{if(!p.alive)return;
     if(!p.isUser){const tg=m.bot(p,t);if(tg){p.tr=tg[0];p.tc=tg[1];}if(m.botFace){const f=m.botFace(p,t);if(f!=null){if(p.fa!=null)p.fa=f;else p.facing=f;}}}
-    if(p.tr!=null&&(p.tr!==p.r||p.tc!==p.c))setMove(p,p.r+Math.sign(p.tr-p.r),p.c+Math.sign(p.tc-p.c),Math.min(320,G.speed*.4));
+    if(p.tr!=null&&(p.tr!==p.r||p.tc!==p.c)){const st=m.float?(a,b)=>a+clamp(b-a,-1,1):(a,b)=>a+Math.sign(b-a);setMove(p,st(p.r,p.tr),st(p.c,p.tc),Math.min(320,G.speed*.4));}
   });
   if(t>=0)m.events(t);
-  S.players.forEach(p=>{if(p.alive&&S.lit.has(key(p.r,p.c)))kill(p,'踩到地板 AOE');});
+  S.players.forEach(p=>{if(p.alive&&S.lit.has(key(Math.round(p.r),Math.round(p.c))))kill(p,'踩到地板 AOE');});
+  if(m.hazard&&t>=0)S.players.forEach(p=>{if(p.alive)m.hazard(p,t);});
   S.t++;S.dirtyPanel=true;
   if(S.t>m.end){m.final&&m.final();finish();}
 }
@@ -484,7 +518,7 @@ function arcPath(cx,cy,R,a1,a2){const p=a=>[cx+R*Math.sin(a*Math.PI/180),cy-R*Ma
 function cellRect(r,c,attrs){const [sr,sc]=toS(r,c);return `<rect x="${M+sc*CELL+2}" y="${M+sr*CELL+2}" width="${CELL-4}" height="${CELL-4}" rx="4" ${attrs}/>`;}
 function ease(t){return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
 function ppos(p,now){if(p.mv){const t=clamp((now-p.mv.t0)/p.mv.dur,0,1);if(t>=1)p.mv=null;else{const e=ease(t);return px(lerp(p.mv.fr,p.r,e),lerp(p.mv.fc,p.c,e));}}return px(p.r,p.c);}
-const baseAng=p=>p.fa!=null?p.fa+S.k*90:sdir(p.facing)*90;
+const baseAng=p=>p.fa!=null?p.fa+VK()*90:sdir(p.facing)*90;
 function pang(p,now){if(p.rot){const t=clamp((now-p.rot.t0)/p.rot.dur,0,1);if(t>=1){p.rot=null;}else return lerp(p.rot.a0,p.rot.a1,ease(t));}return baseAng(p);}
 
 function render(now){
@@ -496,7 +530,7 @@ function render(now){
   for(let i=0;i<=N;i++){h+=`<line x1="${L+i*CELL}" y1="${L}" x2="${L+i*CELL}" y2="${Rr}" stroke="#6e5c3a" stroke-width="2"/><line x1="${L}" y1="${L+i*CELL}" x2="${Rr}" y2="${L+i*CELL}" stroke="#6e5c3a" stroke-width="2"/>`;}
   // waymarks are fixed to the real arena (not rotated)
   [['A',1,2,'#ff5a64'],['B',2,3,'#ffe066'],['C',3,2,'#6fb5ff'],['D',2,1,'#d9a6ff']].forEach(([t,r,c,col])=>{
-    h+=`<text x="${M+(c+.5)*CELL}" y="${M+(r+.5)*CELL+9}" text-anchor="middle" font-size="26" font-weight="900" fill="${col}" opacity=".32" font-family="serif">${t}</text>`;});
+    const [wr,wc]=rotP(r,c,G.cam);h+=`<text x="${M+(wc+.5)*CELL}" y="${M+(wr+.5)*CELL+9}" text-anchor="middle" font-size="26" font-weight="900" fill="${col}" opacity=".32" font-family="serif">${t}</text>`;});
   // fire tiles
   if(S.fire)S.fire.forEach((used,k)=>{const [r,c]=k.split(',').map(Number);
     h+=cellRect(r,c,used?'fill="#3a3226" stroke="#5a4a34" stroke-width="2"':'fill="#e9c25a" fill-opacity=".55" stroke="#ffe08a" stroke-width="2"');
@@ -520,17 +554,17 @@ function render(now){
     <path transform="rotate(${ang*180/Math.PI})" d="M26,-6 L36,0 L26,6 Z" fill="#9ad46b"/></g>`;});
   // boss
   if(S.boss){const b=S.boss;const [x,y]=px(b.r,b.c);
-    if(b.show==='cannon'){let a=b.ang;if(b.rot){const t=clamp((now-b.rot.t0)/b.rot.dur,0,1);a=lerp(b.rot.a0,b.rot.a1,t);}
+    if(b.show==='cannon'){let a=b.ang;if(b.rot){const t=clamp((now-b.rot.t0)/b.rot.dur,0,1);a=lerp(b.rot.a0,b.rot.a1,t);}a+=VK()*90;
       const fire=S.fx.find(f=>f.type==='fan');
       h+=`<path d="${fanPath(x,y,CELL*3.6,a-135,a+135)}" fill="#ff4b3a" fill-opacity="${fire?.55:.16}" stroke="#ff7a6a" stroke-width="2" stroke-dasharray="${fire?'0':'6 5'}"/>`;
-      if(G.hint&&S.state!=='done'){const fa=MODES.cannon.finalFacing()*90;h+=`<path d="${fanPath(x,y,CELL*2.4,fa+135,fa+225)}" fill="#62c98f" fill-opacity=".18" stroke="#62c98f" stroke-width="2" stroke-dasharray="5 4"/>`;}
+      if(G.hint&&S.state!=='done'){const fa=MODES.cannon.finalFacing()*90+VK()*90;h+=`<path d="${fanPath(x,y,CELL*2.4,fa+135,fa+225)}" fill="#62c98f" fill-opacity=".18" stroke="#62c98f" stroke-width="2" stroke-dasharray="5 4"/>`;}
       h+=`<g transform="translate(${x},${y})"><circle r="30" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="3"/><g transform="rotate(${a})"><path d="M0,-44 L11,-28 L-11,-28 Z" fill="#ffd36a"/></g>
       <text y="7" text-anchor="middle" font-size="20" font-weight="900" fill="#ffd36a" font-family="serif">${roman(b.num)}</text>
       <text y="-52" text-anchor="middle" font-size="26" fill="#ffffff">${b.spin>0?'↻':'↺'}</text></g>`;}
     else h+=`<g transform="translate(${x},${y})"><path d="M0,-18 L20,0 L0,18 L-20,0 Z" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="2"/><text y="5" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">BOSS</text></g>`;
   }
   // new north label
-  if(['fire','cube','treant'].includes(S.mode)&&(S.northLabel||G.hint)){const [x,y]=px(-0.72,2);h+=`<text x="${x}" y="${y+7}" text-anchor="middle" font-size="20" font-weight="900" fill="#ffffff" font-family="serif" transform="rotate(${S.k*90} ${x} ${y})">新北</text>`;}
+  if(['fire','cube','treant'].includes(S.mode)&&(S.northLabel||G.hint)){const [x,y]=px(-0.72,2);h+=`<text x="${x}" y="${y+7}" text-anchor="middle" font-size="20" font-weight="900" fill="#ffffff" font-family="serif" transform="rotate(${VK()*90} ${x} ${y})">新北</text>`;}
   // fx
   S.fx=S.fx.filter(f=>now-f.t0<f.dur);
   S.fx.forEach(f=>{const t=(now-f.t0)/f.dur,o=(1-t).toFixed(2);
@@ -542,6 +576,12 @@ function render(now){
     if(f.type==='puff'){const [r,c]=f.k.split(',').map(Number);const [x,y]=px(r,c);h+=`<circle cx="${x}" cy="${y}" r="${10+t*30}" fill="#ffb35a" opacity="${o}"/>`;}
     if(f.type==='stackfx'){const pts=f.both?S.players.filter(p=>p.share):[{r:f.r,c:f.c}];pts.forEach(p=>{const [x,y]=px(p.r,p.c);h+=`<circle cx="${x}" cy="${y}" r="${30+t*30}" fill="#b48ae8" fill-opacity="${o*.4}" stroke="#d6b2ff" stroke-width="3" stroke-opacity="${o}"/>`;});}
   });
+  // puddles + spread markers
+  if(S.puddles)S.puddles.forEach(q=>{const [x,y]=px(q.r,q.c);h+=`<circle cx="${x}" cy="${y}" r="${PUDDLE_R*CELL+10}" fill="#f2cf4a" fill-opacity=".28" stroke="#f2cf4a" stroke-width="2"/>`;});
+  S.players.forEach(p=>{if(!p.spread||!p.alive)return;const [x,y]=ppos(p,now);
+    h+=`<circle cx="${x}" cy="${y}" r="${SPREAD_R*CELL}" fill="#f2cf4a" fill-opacity=".07" stroke="#f2cf4a" stroke-width="2" stroke-dasharray="6 5"/>`;});
+  S.fx.forEach(f=>{if(f.type!=='spread')return;const t=(now-f.t0)/f.dur;const [x,y]=px(f.r,f.c);
+    h+=`<circle cx="${x}" cy="${y}" r="${SPREAD_R*CELL}" fill="#ffe27a" fill-opacity="${(1-t)*.5}"/>`;});
   // players
   const hintSpots=G.hint&&S.state!=='done'?hintGhost():null;
   if(hintSpots)h+=hintSpots;
@@ -597,7 +637,8 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 function load(tab){
-  clearInterval(timer);timer=null;G.tab=tab;const m=MODES[tab];m.setup();S.dirtyPanel=true;
+  clearInterval(timer);timer=null;G.tab=tab;G.cam=0;const m=MODES[tab];m.setup();S.dirtyPanel=true;
+  const hasNorth=['fire','cube','treant'].includes(tab);$('camN').hidden=!hasNorth;
   $('mTitle').textContent=m.title;$('mDesc').innerHTML=m.desc;$('padWrap').hidden=!m.pad;
   document.querySelectorAll('.pad .diag').forEach(b=>b.style.visibility=tab==='analysis'?'visible':'hidden');
   $('padLbl').innerHTML=tab==='analysis'?'面向 8 方向<br>方向鍵 / Q E':'面向<br>(方向鍵)';
@@ -612,12 +653,17 @@ function start(){const m=MODES[S.mode];
 function setFacing(a){if(!S||S.state==='done')return;const u=user();if(!u.alive||u.locked)return;
   if(S.mode==='fire'&&S.state!=='ready'&&S.state!=='count')return;
   a=((a%360)+360)%360;
-  if(u.fa!=null){u.fa=(a-S.k*90+360)%360;}else{if(a%90)return;u.facing=fdir(a/90);}
+  if(u.fa!=null){u.fa=(a-VK()*90+720)%360;}else{if(a%90)return;u.facing=fdir(a/90);}
   S.dirtyPanel=true;}
 
 const tabs=$('tabs');
 Object.entries(MODES).forEach(([k,m],i)=>{const b=document.createElement('button');b.role='tab';b.dataset.tab=k;b.innerHTML=`<span>${i+1}</span>${m.tab}`;b.onclick=()=>load(k);tabs.appendChild(b);});
 $('startBtn').onclick=start;
+function setCam(c){G.cam=((c%4)+4)%4;S.dirtyPanel=true;}
+$('camL').onclick=()=>setCam(G.cam-1);
+$('camR').onclick=()=>setCam(G.cam+1);
+$('camN').onclick=()=>setCam(4-S.k);
+$('camZ').onclick=()=>setCam(0);
 $('resetBtn').onclick=()=>load(G.tab);
 document.querySelectorAll('#roleSeg button').forEach(b=>b.onclick=()=>{G.role=b.dataset.role;document.querySelectorAll('#roleSeg button').forEach(x=>x.setAttribute('aria-pressed',x===b));load(G.tab);});
 $('speed').onchange=e=>{G.speed=+e.target.value;};
@@ -626,18 +672,22 @@ $('hintChk').onchange=e=>{G.hint=e.target.checked;S.dirtyPanel=true;};
 document.querySelectorAll('.pad button').forEach(b=>b.onclick=()=>setFacing(+b.dataset.a));
 const held=new Set();
 document.addEventListener('keyup',e=>held.delete(e.key));
-document.addEventListener('keydown',e=>{if(!MODES[G.tab].pad)return;
+document.addEventListener('keydown',e=>{if(e.target.tagName==='SELECT')return;
+  if(e.key==='['){setCam(G.cam-1);return;}if(e.key===']'){setCam(G.cam+1);return;}
+  if((e.key==='n'||e.key==='N')&&!$('camN').hidden){setCam(4-S.k);return;}
+  if(!MODES[G.tab].pad)return;
   const V={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
   if(e.key in V){e.preventDefault();held.add(e.key);let x=0,y=0;held.forEach(k=>{if(V[k]){x+=V[k][0];y+=V[k][1];}});
     if(x||y)setFacing(Math.round((Math.atan2(x,-y)*180/Math.PI+360)%360));return;}
-  const u=S&&user();if(u&&u.fa!=null&&(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E')){setFacing(u.fa+S.k*90+((e.key==='e'||e.key==='E')?45:-45));}});
+  const u=S&&user();if(u&&u.fa!=null&&(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E')){setFacing(u.fa+VK()*90+((e.key==='e'||e.key==='E')?45:-45));}});
 svg.addEventListener('pointerdown',e=>{
   const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform(svg.getScreenCTM().inverse());
   const sr=(q.y-M)/CELL-.5,sc=(q.x-M)/CELL-.5;const [fr,fc]=toF(sr,sc);const m=MODES[S.mode];
   if(m.click){m.click(fr,fc);return;}
   if(m.tick&&S.state!=='done'){const u=user();if(!u.alive)return;const r=Math.round(fr),c=Math.round(fc);
     if(r<0||r>4||c<0||c>4)return;u.tr=r;u.tc=c;
-    if(S.state==='ready'){setMove(u,r,c,200);}}
+    if(m.float){u.tr=clamp(Math.round(fr*10)/10,-.45,4.45);u.tc=clamp(Math.round(fc*10)/10,-.45,4.45);}
+    if(S.state==='ready'){setMove(u,u.tr,u.tc,200);}}
 });
 function boot(data){
   let initTab='cannon';try{const v=localStorage.getItem('erwang-tab');if(v&&MODES[v])initTab=v;}catch(e){}
