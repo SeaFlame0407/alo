@@ -252,18 +252,18 @@ MODES.analysis={
   tab:'分析・白球',title:'分析・步進地板＋白球＋高精度光彈',tick:true,obs:6,end:16,pad:true,
   desc:`<ul><li>藍框黃箭頭是地板 AOE 起點，白箭頭讓它轉彎，地板一路延伸、全程不能碰到。中間那一列始終安全。</li>
   <li>地板碰到白球就爆炸。你身上的圓環有缺口，四人缺口分別在前/後/左/右，相對自身永遠不變：把缺口對著白球可減傷。白球在斜角時就把身體轉 45°，讓缺口指向斜角（缺口和目標夾角 ±30° 內算對準）。</li>
-  <li>地板走完後頭頂出現旋轉箭頭，Boss 讀「高精度光彈」（Boss 在場地北側）。缺口要在<b>轉完後</b>對著 Boss，否則倒地。</li></ul>
+  <li>地板走完後頭頂出現旋轉箭頭，Boss 讀「高精度光彈」（Boss 在場地中央）。缺口要在<b>轉完後</b>對著 Boss，否則倒地。</li></ul>
   <p>點格子移動（每拍一格）。面向有 8 個方向：用按鈕、同時按兩個方向鍵，或 Q / E 每次轉 45°。第一顆白球在開打第 1 拍就爆。</p>`,
   setup(){
     S=base('analysis');S.k=0;
     S.arrows=ARROWS_X;S.orbs=[{r:1,c:4,gone:false},{r:4,c:1,gone:false}];
-    S.boss={r:-0.88,c:2,show:'mini'};
+    S.boss={r:2,c:2,show:'mini'};
     const gaps=shuffle([0,1,2,3]);
-    const starts=shuffle([[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,1],[3,2],[3,3]]);
+    const starts=shuffle([[1,1],[1,2],[1,3],[2,1],[2,3],[3,1],[3,2],[3,3]]);
     S.players.forEach((p,i)=>{p.gapOff=gaps[i];p.num=rnd(2)?3:5;p.spin=rnd(2)?1:-1;p.fa=rnd(8)*45;[p.r,p.c]=starts[i];p.ring=true;});
     log('場地出現兩個黃色起點箭頭和兩顆白球。');
   },
-  bot(p,t){if(t<-3)return null;return {T:[1,2],D1:[2,2],D2:[2,2],H:[3,2]}[p.id];},
+  bot(p,t){if(t<-3)return null;return {T:[1,2],D1:[1,2],D2:[3,2],H:[3,2]}[p.id];},
   reqFace(p){return (snap45(angTo(p,S.boss.r,S.boss.c))-(p.gapOff+net(p))*90+720)%360;},
   faceFor(p,r,c){return (snap45(angTo(p,r,c))-p.gapOff*90+360)%360;},
   botFace(p,t){if(t<-3)return null;
@@ -279,14 +279,14 @@ MODES.analysis={
     if(t===10){S.players.forEach(p=>p.showSpin=true);S.cast={name:'高精度光彈',tick0:10,len:5};log('頭頂出現旋轉箭頭，Boss 讀條高精度光彈。');}
     if(t===15){S.cast=null;S.players.forEach(p=>{if(!p.alive)return;rotAnim(p,p.num*p.spin,G.speed*.8);p.fa=(p.fa+net(p)*90)%360;p.locked=true;});log('旋轉發動！');}
     if(t===16){S.fx.push({type:'shot',t0:performance.now(),dur:600});
-      S.players.forEach(p=>{if(!p.alive)return;const ok=gapOk(p,S.boss.r,S.boss.c);
+      S.players.forEach(p=>{if(!p.alive)return;if(p.r===S.boss.r&&p.c===S.boss.c){kill(p,'站在 Boss 正中間，缺口對不到 Boss');return;}const ok=gapOk(p,S.boss.r,S.boss.c);
         if(ok)log(`${p.id} 缺口接住光彈`,'ok');else kill(p,'缺口沒對著 Boss，吃到高精度光彈');});}
   },
   buffs(){const u=user();let s=`<span class="chip">缺口在你的<b>${GAPN[u.gapOff]}</b>方</span><span class="chip">缺口指向 ${DN8[snap45(u.fa+u.gapOff*90)/45]}</span><span class="chip num">${roman(u.num)}</span><span class="chip">HP ${Math.max(0,u.hp)}</span>`;
     if(u.showSpin)s+=`<span class="chip num">頭頂 ${spinTxt(u.spin)}</span>`;return s;},
   status(){return tickStatus();},
   hint(){const u=user();const r=this.reqFace(u);const o1=snap45(angTo(u,1,4)),o2=snap45(angTo(u,4,1));
-    return `站中間那一列（第 3 列）。從你現在的位置，第 1 顆白球在<b>${DN8[o1/45]}</b>，要面向 <b>${DN8[this.faceFor(u,1,4)/45]}</b>；第 2 顆白球在<b>${DN8[o2/45]}</b>，要面向 <b>${DN8[this.faceFor(u,4,1)/45]}</b>（缺口在你的${GAPN[u.gapOff]}方，所以面向 = 目標方向 − 缺口偏移）。光彈：${roman(u.num)}+${u.spin>0?'順':'逆'}時針 = 淨轉 ${u.num===5?(u.spin>0?'順':'逆'):(u.spin>0?'逆':'順')}時針 90°，所以讀條時先面向<b>${DN8[r/45]}</b>。`;}
+    return `Boss 在場地中央。站中間那一列（第 3 列），Boss 上方或下方那格。從你現在的位置，第 1 顆白球在<b>${DN8[o1/45]}</b>，要面向 <b>${DN8[this.faceFor(u,1,4)/45]}</b>；第 2 顆白球在<b>${DN8[o2/45]}</b>，要面向 <b>${DN8[this.faceFor(u,4,1)/45]}</b>（缺口在你的${GAPN[u.gapOff]}方，所以面向 = 目標方向 − 缺口偏移）。光彈：${roman(u.num)}+${u.spin>0?'順':'逆'}時針 = 淨轉 ${u.num===5?(u.spin>0?'順':'逆'):(u.spin>0?'逆':'順')}時針 90°，所以讀條時先面向<b>${DN8[r/45]}</b>。`;}
 };
 
 /* ---- 3. 平面炸彈戰術 ---- */
@@ -561,7 +561,7 @@ function render(now){
       h+=`<g transform="translate(${x},${y})"><circle r="30" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="3"/><g transform="rotate(${a})"><path d="M0,-44 L11,-28 L-11,-28 Z" fill="#ffd36a"/></g>
       <text y="7" text-anchor="middle" font-size="20" font-weight="900" fill="#ffd36a" font-family="serif">${roman(b.num)}</text>
       <text y="-52" text-anchor="middle" font-size="26" fill="#ffffff">${b.spin>0?'↻':'↺'}</text></g>`;}
-    else h+=`<g transform="translate(${x},${y})"><path d="M0,-18 L20,0 L0,18 L-20,0 Z" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="2"/><text y="5" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">BOSS</text></g>`;
+    else h+=`<g transform="translate(${x},${y})"><path d="M0,-28 L30,0 L0,28 L-30,0 Z" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="2"/><text y="5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">BOSS</text></g>`;
   }
   // new north label
   if(['fire','cube','treant'].includes(S.mode)&&(S.northLabel||G.hint)){const [x,y]=px(-0.72,2);h+=`<text x="${x}" y="${y+7}" text-anchor="middle" font-size="20" font-weight="900" fill="#ffffff" font-family="serif" transform="rotate(${VK()*90} ${x} ${y})">新北</text>`;}
