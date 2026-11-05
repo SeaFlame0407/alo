@@ -1,1 +1,64 @@
+<title>副本機制模擬器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap">
+<style>
+/* Layout: one title block, then three boss cards in a row (stacked on phones). Same dark arena palette as the simulators. */
+:root{
+  --bg:#0f1719; --panel:#162225; --panel2:#1c2b2f; --line:#2b3f43;
+  --fg:#e8efe9; --muted:#97aba6; --accent:#e9bd52;
+  --display:"Noto Serif TC","Songti TC",serif;
+  --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 56px}
+.wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1{font-family:var(--display);font-weight:900;font-size:clamp(28px,5vw,42px);margin:0;letter-spacing:.05em;text-wrap:balance}
+.lede{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.bosses{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.bosses{grid-template-columns:minmax(0,1fr)}}
+.boss{display:flex;flex-direction:column;gap:12px;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:inherit;text-decoration:none;min-width:0}
+a.boss:hover{border-color:var(--accent)}
+a.boss:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.boss.todo{background:transparent;border-style:dashed}
+.num{font-family:var(--display);font-weight:900;font-size:56px;line-height:1;color:var(--accent)}
+.boss.todo .num{color:var(--line)}
+.boss h2{margin:0;font-size:20px;font-family:var(--display)}
+.boss ul{margin:0;padding-left:18px;font-size:14px;color:var(--fg);display:flex;flex-direction:column;gap:2px}
+.state{font-size:12px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.boss:not(.todo) .state{color:#62c98f}
+.go{margin-top:auto;font-weight:700;color:var(--accent)}
+.boss.todo p{margin:0;font-size:14px;color:var(--muted)}
+</style>
 
+<div class="wrap">
+  <header>
+    <h1>副本機制模擬器</h1>
+  </header>
+  <div class="bosses">
+    <a class="boss todo" href="boss1/index.html">
+      <span class="num">一</span>
+      <h2>一王</h2>
+      <p>工事中，如有需求請洽版主</p>
+    </a>
+    <a class="boss" href="boss2/index.html">
+      <span class="num">二</span>
+      <span class="state">可練習・5 段機制</span>
+      <h2>二王</h2>
+      <ul>
+        <li>旋轉角乘法・魔紋炮</li>
+        <li>分析・步進地板＋白球</li>
+        <li>平面炸彈戰術</li>
+        <li>暴雷戰術：立體</li>
+        <li>樹人・變換魔紋</li>
+      </ul>
+      <span class="go">進入模擬器 →</span>
+    </a>
+    <a class="boss todo" href="boss3/index.html">
+      <span class="num">三</span>
+      <h2>三王</h2>
+      <p>工事中，如有需求請洽版主</p>
+    </a>
+  </div>
+</div>
