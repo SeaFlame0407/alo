@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>二王機制模擬器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap">
+<style>
+/* Layout: arena board on the left, mechanic briefing + live status on the right; stacks on phones. Single dark arena look. */
+:root{
+  --bg:#0f1719; --panel:#162225; --panel2:#1c2b2f; --line:#2b3f43;
+  --fg:#e8efe9; --muted:#97aba6; --accent:#e9bd52; --floor:#56bfe6;
+  --ok:#62c98f; --bad:#e6604f; --violet:#b48ae8;
+  --display:"Noto Serif TC","Songti TC",serif;
+  --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px}
+h1{font-family:var(--display);font-weight:900;font-size:clamp(24px,4vw,34px);margin:0;letter-spacing:.04em;text-wrap:balance}
+h1 small{display:block;font-family:var(--body);font-weight:400;font-size:13px;color:var(--muted);letter-spacing:.02em}
+.opts{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;font-size:13px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:var(--fg);border:0;padding:6px 11px;font:inherit;font-weight:700;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#1a1405}
+select,label.chk{font:inherit;color:var(--fg)}
+select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+label.chk{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+nav.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;border-bottom:1px solid var(--line)}
+nav.tabs button{flex:0 0 auto;background:transparent;border:0;border-bottom:3px solid transparent;color:var(--muted);font:inherit;font-weight:500;padding:8px 12px;cursor:pointer}
+nav.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+nav.tabs button span{font-size:11px;color:var(--accent);margin-right:6px;font-variant-numeric:tabular-nums}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
+@media (max-width:880px){.stage{grid-template-columns:minmax(0,1fr)}}
+.boardcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.boardbox{position:relative;max-width:620px;width:100%;margin:0 auto}
+svg#board{width:100%;height:auto;display:block;touch-action:manipulation;user-select:none;cursor:crosshair}
+.banner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,16,18,.92);border:1px solid var(--line);border-radius:12px;padding:14px 22px;text-align:center;pointer-events:none;min-width:200px}
+.banner b{display:block;font-family:var(--display);font-size:26px}
+.banner.ok b{color:var(--ok)} .banner.bad b{color:var(--bad)}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center}
+.btn{background:var(--accent);color:#1a1405;border:0;border-radius:8px;padding:9px 18px;font:inherit;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+#startBtn{min-width:8.5em}
+#resetBtn{margin-left:14px}
+.btn:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pad{display:grid;grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,34px);gap:4px}
+.pad button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;font-size:16px;cursor:pointer}
+.pad .u{grid-column:2;grid-row:1}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:3}.pad .r{grid-column:3;grid-row:2}.pad .ul{grid-column:1;grid-row:1}.pad .ur{grid-column:3;grid-row:1}.pad .dl{grid-column:1;grid-row:3}.pad .dr{grid-column:3;grid-row:3}
+.padwrap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+aside.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+aside h2{font-family:var(--display);font-size:20px;margin:0;text-wrap:balance}
+aside h3{font-size:11px;letter-spacing:.14em;color:var(--muted);margin:0 0 6px;font-weight:700}
+.desc ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.desc p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.buffs{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:13px;font-weight:500}
+.chip.fire{border-color:#c8662f;color:#ffb57a}.chip.num{border-color:var(--accent);color:var(--accent)}.chip.share{border-color:var(--violet);color:var(--violet)}
+.status{font-size:14px;font-variant-numeric:tabular-nums}
+.castbar{height:8px;border-radius:4px;background:var(--panel2);overflow:hidden;margin-top:6px}
+.castbar i{display:block;height:100%;background:var(--accent)}
+.hintbox{background:rgba(233,189,82,.08);border:1px dashed rgba(233,189,82,.5);border-radius:8px;padding:8px 10px;font-size:13.5px}
+.log{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:3px;font-size:13px}
+.log div{padding-left:10px;border-left:3px solid var(--line)}
+.log .ok{border-color:var(--ok)}.log .bad{border-color:var(--bad);color:#ffc2b8}.log .info{border-color:var(--floor)}
+.note{font-size:12px;color:var(--muted)}
+</style>
+
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}
+.back{display:inline-block;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:4px}.back:hover{color:var(--accent)}</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><a class="back" href="../index.html">← 回首頁</a>
+    <h1>二王機制模擬器<small>依《二王機制》文字與截圖重建的練習用模擬，點場地移動，隊友由 AI 照解法走位</small></h1></div>
+    <div class="opts">
+      <span>我的職位</span>
+      <div class="seg" id="roleSeg">
+        <button data-role="T" aria-pressed="true">T</button><button data-role="H" aria-pressed="false">H</button><button data-role="D1" aria-pressed="false">D1</button><button data-role="D2" aria-pressed="false">D2</button>
+      </div>
+      <label class="chk" for="speed">節奏
+        <select id="speed"><option value="1400">慢</option><option value="1000" selected>中</option><option value="700">快</option></select>
+      </label>
+      <label class="chk" for="rotChk"><input type="checkbox" id="rotChk" checked>隨機場地方向</label>
+      <label class="chk" for="hintChk"><input type="checkbox" id="hintChk">顯示解法</label>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+
+  <div class="stage">
+    <div class="boardcol">
+      <div class="boardbox">
+        <svg id="board" viewBox="0 0 480 480" aria-label="場地"></svg>
+        <div class="banner" id="banner" hidden></div>
+      </div>
+      <div class="ctl">
+        <button class="btn" id="startBtn">開始</button>
+        <button class="btn ghost" id="resetBtn">換一組隨機</button>
+        <div class="padwrap" id="padWrap">
+          <div class="pad">
+            <button class="ul diag" data-a="315" aria-label="面向左上">↖</button><button class="u" data-a="0" aria-label="面向上">↑</button><button class="ur diag" data-a="45" aria-label="面向右上">↗</button><button class="l" data-a="270" aria-label="面向左">←</button><button class="r" data-a="90" aria-label="面向右">→</button><button class="dl diag" data-a="225" aria-label="面向左下">↙</button><button class="d" data-a="180" aria-label="面向下">↓</button><button class="dr diag" data-a="135" aria-label="面向右下">↘</button>
+          </div>
+          <span id="padLbl">面向<br>(方向鍵)</span>
+        </div>
+      </div>
+    </div>
+    <aside class="panel">
+      <h2 id="mTitle"></h2>
+      <div class="desc" id="mDesc"></div>
+      <div><h3>你的狀態</h3><div class="buffs" id="buffs"></div></div>
+      <div><h3>進度</h3><div class="status" id="status"></div></div>
+      <div class="hintbox" id="hint" hidden></div>
+      <div><h3>紀錄</h3><div class="log" id="log"></div></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const CELL=72, M=60, N=5;
+const DV=[[-1,0],[0,1],[1,0],[0,-1]];
+const DN=['北','東','南','西'];
+const GAPN=['前','右','後','左'];
+const DN8=['北','東北','東','東南','南','西南','西','西北'];
+const TOL=30;
+const angTo=(p,r,c)=>(Math.atan2(c-p.c,-(r-p.r))*180/Math.PI+360)%360;
+const angDiff=(a,b)=>Math.abs(((a-b)%360+540)%360-180);
+const snap45=a=>((Math.round(a/45)*45)%360+360)%360;
+const gapOk=(p,r,c)=>angDiff((p.fa+p.gapOff*90)%360,angTo(p,r,c))<=TOL;
+const COLOR={T:'#4a7fe0',H:'#3fae5a',D1:'#d14b40',D2:'#d14b40'};
+const ROLE_ORDER=['T','D1','H','D2'];
+const G={role:'T',speed:1000,rotate:true,hint:false,tab:'cannon'};
+let S=null, timer=null;
+
+const $=id=>document.getElementById(id);
+const svg=$('board');
+const rnd=n=>Math.floor(Math.random()*n);
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
+const key=(r,c)=>r+','+c;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const cheb=(a,b)=>Math.max(Math.abs(a.r-b.r),Math.abs(a.c-b.c));
+function rotP(r,c,k){let x=c-2,y=r-2;for(let i=0;i<k;i++){const nx=-y,ny=x;x=nx;y=ny;}return [y+2,x+2];}
+const toS=(r,c)=>rotP(r,c,S.k);
+const toF=(r,c)=>rotP(r,c,(4-S.k)%4);
+function px(r,c){const [sr,sc]=toS(r,c);return [M+(sc+.5)*CELL,M+(sr+.5)*CELL];}
+const sdir=d=>(d+S.k)%4;
+const fdir=sd=>(sd-S.k+4)%4;
+const net=p=>(((p.num*p.spin)%4)+4)%4;
+const spinTxt=s=>s>0?'順時針 ↻':'逆時針 ↺';
+const roman=n=>n===3?'III':'V';
+function dirTo(p,r,c){const dr=r-p.r,dc=c-p.c;const a=Math.abs(dr),b=Math.abs(dc);
+  const v=dr<0?0:2,h=dc>0?1:3; if(a>b)return [v]; if(b>a)return [h]; return [v,h];}
+
+function log(txt,cls='info'){S.log.push({txt,cls});S.dirtyPanel=true;}
+function mkPlayers(){
+  return ROLE_ORDER.map(id=>({id,color:COLOR[id],isUser:id===G.role,r:2,c:2,tr:null,tc:null,facing:0,gapOff:0,num:5,spin:1,
+    stacks:0,stacks0:0,hp:100,alive:true,share:false,showSpin:false,locked:false,mv:null,rot:null,why:''}));
+}
+function user(){return S.players.find(p=>p.isUser);}
+function kill(p,why){if(!p.alive)return;p.alive=false;p.why=why;log(`${p.id} 倒地：${why}`,'bad');}
+
+/* ---------- path data from the screenshots (frame coords, row 0 = 新北) ---------- */
+const PATH_R=[[0,4],[1,4],[2,4],[3,4],[4,4],[4,3],[3,3],[2,3],[1,3],[0,3]];
+const PATH_L=[[4,0],[3,0],[2,0],[1,0],[0,0],[0,1],[1,1],[2,1],[3,1],[4,1]];
+const ARROWS_X=[{r:0,c:4,d:2,start:1},{r:4,c:0,d:0,start:1},{r:0,c:0,d:1},{r:0,c:1,d:2},{r:4,c:3,d:0},{r:4,c:4,d:3}];
+const CUBES=[[0,3],[1,0],[2,1],[3,0],[3,3],[4,1]];
+const FIRE_TILES=[[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,2],[3,3]];
+const SPOTS=[{r:1,c:-0.3,n:'上排・遠'},{r:1,c:0.35,n:'上排・近'},{r:2.3,c:0.35,n:'中排・靠下'},{r:2.7,c:0.35,n:'下排・靠上'},{r:3.7,c:3,n:'南側・近'},{r:4.3,c:3,n:'南側・遠'}];
+const TR_A=[[0,3],[0,2],[0,1],[1,1],[2,1],[3,1],[4,1]];
+const TR_B=[[0,4],[1,4],[2,4],[3,4],[4,4]];
+
+function base(mode){
+  return {mode,k:0,state:'ready',t:0,players:mkPlayers(),lit:new Set(),arrows:[],orbs:[],cubes:[],treants:[],fire:null,spots:null,boss:null,fx:[],log:[],cast:null,result:null,northLabel:false,dirtyPanel:true};
+}
+function light(rc){S.lit.add(key(rc[0],rc[1]));}
+function setMove(p,r,c,dur=260){p.mv={fr:p.r,fc:p.c,t0:performance.now(),dur};p.r=r;p.c=c;}
+function rotAnim(p,turns,dur){const a0=p.fa!=null?p.fa+S.k*90:sdir(p.facing)*90;p.rot={a0,a1:a0+turns*90,t0:performance.now(),dur};}
+
+/* ======================= MODES ======================= */
+const MODES={};
+
+/* ---- 1. 魔紋炮 ---- */
+MODES.cannon={
+  tab:'魔紋炮',title:'旋轉角乘法・魔紋炮',
+  desc:`<ul><li>Boss 放 270° 扇形刀，只有背後 90° 安全。</li>
+  <li>Boss 頭頂有順/逆時針箭頭、身上有 III 或 V：倒數 5 秒後，Boss 依箭頭方向轉「90°×數字」。</li>
+  <li>轉 4 次等於回原位：<b>V</b> = 往箭頭方向轉 90°；<b>III</b> = 往箭頭反方向轉 90°。</li></ul>
+  <p>按「開始」後在倒數期間點場地，站到 Boss 轉完後的安全區。</p>`,
+  pad:false,
+  setup(){
+    S=base('cannon');S.k=0;
+    const f=rnd(4);
+    S.boss={r:2,c:2,facing:f,spin:rnd(2)?1:-1,num:rnd(2)?3:5,ang:f*90,rot:null,show:'cannon'};
+    S.players.forEach((p,i)=>{const a=Math.random()*Math.PI*2;p.r=2-Math.cos(a)*1.7;p.c=2+Math.sin(a)*1.7;p.goal=null;});
+    log('Boss 開始詠唱魔紋炮，先看箭頭方向和數字。');
+  },
+  finalFacing(){const b=S.boss;return (((b.facing+b.num*b.spin)%4)+4)%4;},
+  start(){if(S.state!=='ready')return;S.state='count';S.cd0=performance.now();S.cdLen=5*G.speed;
+    S.cast={name:'魔紋炮',t0:S.cd0,len:S.cdLen};log('倒數 5 秒，移動到轉完後的安全區！');},
+  click(fr,fc){if(S.state==='done'||S.state==='rot'||S.state==='fire')return;const u=user();u.goal=[clamp(fr,-.4,4.4),clamp(fc,-.4,4.4)];},
+  botGoal(p,i){const sd=(this.finalFacing()+2)%4;const off=[-.5,-.17,.17,.5][i];const d=DV[sd],pp=[d[1],-d[0]];
+    return [2+d[0]*1.7+pp[0]*off,2+d[1]*1.7+pp[1]*off];},
+  frame(now,dt){
+    const b=S.boss;
+    S.players.forEach((p,i)=>{
+      if(!p.isUser&&S.state==='count'&&now-S.cd0>S.cdLen*.55)p.goal=this.botGoal(p,i);
+      if(p.goal){const dr=p.goal[0]-p.r,dc=p.goal[1]-p.c,d=Math.hypot(dr,dc),st=3.2*dt;
+        if(d<=st){p.r=p.goal[0];p.c=p.goal[1];p.goal=null;}else{p.r+=dr/d*st;p.c+=dc/d*st;}}
+    });
+    if(S.state==='count'&&now-S.cd0>=S.cdLen){
+      S.state='rot';S.cast=null;const turns=b.num*b.spin;b.rot={a0:b.facing*90,a1:b.facing*90+turns*90,t0:now,dur:b.num*260};
+      log(`Boss 依箭頭${b.spin>0?'順':'逆'}時針轉 ${b.num} 次 90°…`);
+    }
+    if(S.state==='rot'&&now-b.rot.t0>=b.rot.dur){
+      b.ang=b.rot.a1;b.rot=null;S.state='fire';S.fx.push({type:'fan',ang:b.ang,t0:now,dur:700});
+      const safeC=b.ang+180;
+      S.players.forEach(p=>{const a=Math.atan2(p.c-2,-(p.r-2))*180/Math.PI;let d=((a-safeC)%360+540)%360-180;
+        const dist=Math.hypot(p.r-2,p.c-2);
+        if(Math.abs(d)<=45&&dist>.3)log(`${p.id} 在安全區`,'ok');else kill(p,'被魔紋炮扇形打中');});
+      finish();
+    }
+  },
+  status(){const b=S.boss;let s=`Boss：頭頂 <b>${spinTxt(b.spin)}</b>，身上 <b>${roman(b.num)}</b>`;
+    if(S.state==='count'){const left=Math.max(0,(S.cdLen-(performance.now()-S.cd0))/G.speed);s+=`<br>倒數 ${left.toFixed(1)}`;}
+    return s;},
+  buffs(){return `<span class="chip">Boss ${spinTxt(S.boss.spin)}</span><span class="chip num">Boss ${roman(S.boss.num)}</span>`;},
+  hint(){const b=S.boss,s0=(b.facing+2)%4,s1=(this.finalFacing()+2)%4;
+    return `目前安全區在 Boss 的<b>${DN[s0]}</b>側。${roman(b.num)} ${b.num===5?'= 跟箭頭同向':'= 跟箭頭反向'}轉 90° → 轉完安全區在<b>${DN[s1]}</b>側。`;}
+};
+
+/* ---- 2. 分析 ---- */
+MODES.analysis={
+  tab:'分析・白球',title:'分析・步進地板＋白球＋高精度光彈',tick:true,obs:6,end:16,pad:true,
+  desc:`<ul><li>藍框黃箭頭是地板 AOE 起點，白箭頭讓它轉彎，地板一路延伸、全程不能碰到。中間那一列始終安全。</li>
+  <li>地板碰到白球就爆炸。你身上的圓環有缺口，四人缺口分別在前/後/左/右，相對自身永遠不變：把缺口對著白球可減傷。白球在斜角時就把身體轉 45°，讓缺口指向斜角（缺口和目標夾角 ±30° 內算對準）。</li>
+  <li>地板走完後頭頂出現旋轉箭頭，Boss 讀「高精度光彈」（Boss 在場地北側）。缺口要在<b>轉完後</b>對著 Boss，否則倒地。</li></ul>
+  <p>點格子移動（每拍一格）。面向有 8 個方向：用按鈕、同時按兩個方向鍵，或 Q / E 每次轉 45°。第一顆白球在開打第 1 拍就爆。</p>`,
+  setup(){
+    S=base('analysis');S.k=0;
+    S.arrows=ARROWS_X;S.orbs=[{r:1,c:4,gone:false},{r:4,c:1,gone:false}];
+    S.boss={r:-0.88,c:2,show:'mini'};
+    const gaps=shuffle([0,1,2,3]);
+    const starts=shuffle([[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,1],[3,2],[3,3]]);
+    S.players.forEach((p,i)=>{p.gapOff=gaps[i];p.num=rnd(2)?3:5;p.spin=rnd(2)?1:-1;p.fa=rnd(8)*45;[p.r,p.c]=starts[i];p.ring=true;});
+    log('場地出現兩個黃色起點箭頭和兩顆白球。');
+  },
+  bot(p,t){if(t<-3)return null;return {T:[1,2],D1:[2,2],D2:[2,2],H:[3,2]}[p.id];},
+  reqFace(p){return (snap45(angTo(p,S.boss.r,S.boss.c))-(p.gapOff+net(p))*90+720)%360;},
+  faceFor(p,r,c){return (snap45(angTo(p,r,c))-p.gapOff*90+360)%360;},
+  botFace(p,t){if(t<-3)return null;
+    if(t<=1)return this.faceFor(p,1,4);
+    if(t<=9)return this.faceFor(p,4,1);
+    if(t<=14)return this.reqFace(p);return null;},
+  events(t){
+    if(t<PATH_R.length)light(PATH_R[t]);if(t<PATH_L.length)light(PATH_L[t]);
+    S.orbs.forEach((o,i)=>{if(o.gone||!S.lit.has(key(o.r,o.c)))return;o.gone=true;
+      S.fx.push({type:'boom',r:o.r,c:o.c,t0:performance.now(),dur:700});log(`第 ${i+1} 顆白球爆炸`,'info');
+      S.players.forEach(p=>{if(!p.alive)return;const ok=gapOk(p,o.r,o.c);
+        p.hp-=ok?10:60;log(`${p.id} ${ok?'缺口對準，減傷':'缺口沒對準，重擊 -60'}`,ok?'ok':'bad');if(p.hp<=0)kill(p,'兩次重擊');});});
+    if(t===10){S.players.forEach(p=>p.showSpin=true);S.cast={name:'高精度光彈',tick0:10,len:5};log('頭頂出現旋轉箭頭，Boss 讀條高精度光彈。');}
+    if(t===15){S.cast=null;S.players.forEach(p=>{if(!p.alive)return;rotAnim(p,p.num*p.spin,G.speed*.8);p.fa=(p.fa+net(p)*90)%360;p.locked=true;});log('旋轉發動！');}
+    if(t===16){S.fx.push({type:'shot',t0:performance.now(),dur:600});
+      S.players.forEach(p=>{if(!p.alive)return;const ok=gapOk(p,S.boss.r,S.boss.c);
+        if(ok)log(`${p.id} 缺口接住光彈`,'ok');else kill(p,'缺口沒對著 Boss，吃到高精度光彈');});}
+  },
+  buffs(){const u=user();let s=`<span class="chip">缺口在你的<b>${GAPN[u.gapOff]}</b>方</span><span class="chip">缺口指向 ${DN8[snap45(u.fa+u.gapOff*90)/45]}</span><span class="chip num">${roman(u.num)}</span><span class="chip">HP ${Math.max(0,u.hp)}</span>`;
+    if(u.showSpin)s+=`<span class="chip num">頭頂 ${spinTxt(u.spin)}</span>`;return s;},
+  status(){return tickStatus();},
+  hint(){const u=user();const r=this.reqFace(u);const o1=snap45(angTo(u,1,4)),o2=snap45(angTo(u,4,1));
+    return `站中間那一列（第 3 列）。從你現在的位置，第 1 顆白球在<b>${DN8[o1/45]}</b>，要面向 <b>${DN8[this.faceFor(u,1,4)/45]}</b>；第 2 顆白球在<b>${DN8[o2/45]}</b>，要面向 <b>${DN8[this.faceFor(u,4,1)/45]}</b>（缺口在你的${GAPN[u.gapOff]}方，所以面向 = 目標方向 − 缺口偏移）。光彈：${roman(u.num)}+${u.spin>0?'順':'逆'}時針 = 淨轉 ${u.num===5?(u.spin>0?'順':'逆'):(u.spin>0?'逆':'順')}時針 90°，所以讀條時先面向<b>${DN8[r/45]}</b>。`;}
+};
+
+/* ---- 3. 平面炸彈戰術 ---- */
+MODES.fire={
+  tab:'平面炸彈戰術',title:'平面炸彈戰術・八格地雷',pad:true,
+  desc:`<ul><li>場中央 3×3 出現八塊黃色提示區、布下 8 個地雷（缺一格）。把缺口擺在左下就是新北。</li>
+  <li>全員 16 秒狀態：<b>移動命令：前</b>（結束時強制往前走）、<b>3 倍 / 5 倍旋轉角</b>（頭頂箭頭的旋轉乘 3 或 5）、<b>減算炸彈α</b>（一個 3 檔、兩個 2 檔、一個 1 檔）。</li>
+  <li>撞到地雷會引爆它（小範圍 AOE）並消一檔；被引爆過的地雷就沒了，每格只能用一次。檔數歸 0 才解除。</li>
+  <li>時間到還有檔數，或帶著減算炸彈倒地 → 全屏高傷<b>大爆炸</b>（團滅）。</li>
+  <li>兩人帶<b>爆炸目標</b>：時間到發動可分攤的<b>雙數爆炸</b>，附加魔法受傷加重，單吃 30 萬。<b>二二分攤</b>，兩顆不能疊在一起。</li>
+  <li>中排 2 檔站格子偏下、下排 1 檔站格子偏上，兩人貼著走，到右側才分攤得到。</li>
+  <li>強制移動後會分成兩組：上排 2 檔＋3 檔在右上角一組，中排 2 檔＋1 檔在右側一組。每組要剛好一個爆炸目標，所以由爆炸目標決定哪個 2 檔站上排（例：坦和補都是目標 → D 換到上排）。</li></ul>
+  <p>按「開始」後有 16 秒：點場地站位（靠近虛線圈會吸附），調整面向。倒數結束自動旋轉＋強制移動。</p>`,
+  setup(){
+    S=base('fire');S.k=G.rotate?rnd(4):0;
+    S.fire=new Map(FIRE_TILES.map(t=>[key(t[0],t[1]),false]));S.spots=SPOTS;
+    const st=shuffle([1,2,2,3]);
+    S.players.forEach((p,i)=>{p.stacks=p.stacks0=st[i];p.num=rnd(2)?3:5;p.spin=rnd(2)?1:-1;p.showSpin=true;p.facing=rnd(4);
+      p.r=4.25;p.c=-.2+i*.42;p.spot=null;p.vuln=false;});
+    shuffle(S.players).slice(0,2).forEach(p=>p.share=true);
+    const twos=S.players.filter(p=>p.stacks0===2),one=S.players.find(p=>p.stacks0===1),three=S.players.find(p=>p.stacks0===3);
+    const cands=twos.filter(t=>(+t.share + +three.share)===1&&(+twos.find(o=>o!==t).share + +one.share)===1);
+    const PRI=['T','H','D1','D2'];cands.sort((a,b)=>PRI.indexOf(a.id)-PRI.indexOf(b.id));S.topId=cands[0].id;
+    log('平面炸彈戰術：八塊黃色提示區出現，buff 上身。');
+  },
+  correctSpot(p){if(p.stacks0===1)return 3;if(p.stacks0===3)return 4;return p.id===S.topId?0:2;},
+  wantDir(i){return i===4?0:1;},
+  click(fr,fc){if(S.state!=='ready'&&S.state!=='count')return;const u=user();let r=clamp(fr,-.45,4.45),c=clamp(fc,-.45,4.45);
+    let best=-1,bd=.35;S.spots.forEach((s,i)=>{const d=Math.hypot(s.r-r,s.c-c);if(d<bd){bd=d;best=i;}});
+    if(best>=0){r=S.spots[best].r;c=S.spots[best].c;}u.spot=best>=0?best:null;setMove(u,r,c,300);S.dirtyPanel=true;},
+  start(){
+    if(S.state==='ready'){S.state='count';S.cd0=performance.now();S.cdLen=16*G.speed;S.botsIn=false;log('16 秒倒數開始，站位並調整面向！');return;}
+    if(S.state==='count'){S.cd0=performance.now()-S.cdLen;}
+  },
+  placeBots(){S.botsIn=true;S.players.forEach(p=>{if(p.isUser)return;const i=this.correctSpot(p);p.spot=i;setMove(p,SPOTS[i].r,SPOTS[i].c,700);
+      p.facing=((this.wantDir(i)-net(p))%4+4)%4;});log('隊友就位。');},
+  frame(now){
+    if(S.state==='count'){const el=now-S.cd0;
+      if(!S.botsIn&&el>S.cdLen*.5)this.placeBots();
+      if(el>=S.cdLen){if(!S.botsIn)this.placeBots();S.state='rot';S.ph0=now+750;
+        S.players.forEach(p=>{p.mv=null;});
+        S.players.forEach(p=>{rotAnim(p,p.num*p.spin,1100);p.facing=(p.facing+net(p))%4;});
+        log('時間到：旋轉角發動，面向轉 90°×倍數…');S.dirtyPanel=true;}}
+    else if(S.state==='rot'&&now-S.ph0>500){S.state='march';S.ph0=now;S.ev=this.compute();S.evi=0;
+      S.players.forEach(p=>{p.sr=p.r;p.sc=p.c;p.rot=null;});log('移動命令：前！');}
+    else if(S.state==='march'){const tau=Math.min(3,(now-S.ph0)/1000*1.5);
+      S.players.forEach(p=>{if(p.fell)return;const d=DV[p.facing];p.r=p.sr+d[0]*tau;p.c=p.sc+d[1]*tau;});
+      while(S.evi<S.ev.length&&S.ev[S.evi].tau<=tau){this.apply(S.ev[S.evi++]);}
+      if(tau>=3)this.judge();}
+  },
+  compute(){const ev=[];S.players.forEach(p=>{const d=DV[p.facing];let prev=key(Math.round(p.r),Math.round(p.c));
+    for(let tau=.005;tau<=3;tau+=.005){const r=p.r+d[0]*tau,c=p.c+d[1]*tau;
+      if(r<-.5||r>4.5||c<-.5||c>4.5){ev.push({tau,p,fall:true});break;}
+      const k=key(Math.round(r),Math.round(c));if(k!==prev){prev=k;ev.push({tau,p,k});}}});
+    return ev.sort((a,b)=>a.tau-b.tau);},
+  apply(e){const p=e.p;if(!p.alive)return;
+    if(e.fall){p.fell=true;kill(p,'被移動命令推出場外');if(p.stacks>0){S.bigBoom=true;log(`${p.id} 帶著減算炸彈倒地`,'bad');}return;}
+    if(!S.fire.has(e.k)||S.fire.get(e.k))return;
+    S.fire.set(e.k,true);S.fx.push({type:'puff',k:e.k,t0:performance.now(),dur:500});
+    if(p.stacks>0){p.stacks--;log(`${p.id} 引爆地雷，減算炸彈剩 ${p.stacks} 檔${p.stacks===0?'（解除）':''}`,'ok');}
+    else log(`${p.id} 已經 0 檔還引爆地雷，把別人要用的地雷吃掉了`,'bad');
+    S.dirtyPanel=true;},
+  judge(){
+    const left=S.players.filter(p=>p.alive&&p.stacks>0);
+    left.forEach(p=>log(`${p.id} 時間到還有 ${p.stacks} 檔減算炸彈`,'bad'));
+    if(left.length||S.bigBoom){S.fx.push({type:'flash',t0:performance.now(),dur:900});log('大爆炸！全屏高傷害','bad');S.wipe=true;}
+    const sh=S.players.filter(p=>p.share);
+    S.fx.push({type:'stackfx',t0:performance.now(),dur:700,both:true});
+    const R=0.9,near=(a,b)=>Math.hypot(a.r-b.r,a.c-b.c)<=R;
+    const grp=sh.map(t=>t.alive?S.players.filter(p=>p.alive&&near(p,t)):[]);
+    if(sh[0].alive&&sh[1].alive&&near(sh[0],sh[1])){log(`兩個雙數爆炸（${sh[0].id}、${sh[1].id}）疊在一起`,'bad');
+      S.players.forEach(p=>{if(grp[0].includes(p)&&grp[1].includes(p))kill(p,'同時吃到兩個雙數爆炸（魔法受傷加重）');});}
+    else sh.forEach((t,i)=>{if(!t.alive)return;const g=grp[i];
+      if(g.length<2)kill(t,'單吃雙數爆炸（30 萬）');
+      else log(`${t.id} 的雙數爆炸由 ${g.map(p=>p.id).join('+')} 分攤`,g.length===2?'ok':'info');});
+    S.players.forEach(p=>{if(p.alive&&sh.some(t=>near(p,t)))p.vuln=true;});
+    S.northLabel=true;finish();},
+  buffs(){const u=user();let s=`<span class="chip fire">減算炸彈α ${u.stacks} 檔</span><span class="chip">移動命令：前</span><span class="chip num">${u.num} 倍旋轉角</span><span class="chip num">頭頂 ${spinTxt(u.spin)}</span>`;
+    if(u.share)s+='<span class="chip share">爆炸目標</span>';if(u.vuln)s+='<span class="chip">魔法受傷加重</span>';return s;},
+  status(){const u=user();let s;
+    if(S.state==='ready')s='按「開始」進入 16 秒倒數';
+    else if(S.state==='count'){const left=Math.max(0,(S.cdLen-(performance.now()-S.cd0))/G.speed);
+      s=`倒數 ${left.toFixed(1)} 秒　站位：${u.spot!=null?SPOTS[u.spot].n:'自由位置'}`;}
+    else s={rot:'旋轉角發動中',march:'強制移動中',done:'結束'}[S.state];
+    const sh=S.players.filter(p=>p.share).map(p=>p.id).join(' + ');
+    return `${s}<br>減算炸彈：${S.players.map(p=>p.id+' '+p.stacks0).join('、')}　爆炸目標：${sh}`;},
+  hint(){const u=user();const i=this.correctSpot(u);const w=this.wantDir(i);const f=((w-net(u))%4+4)%4;
+    const sh=S.players.filter(p=>p.share).map(p=>p.id).join('、');
+    const why=u.stacks0===2?`（爆炸目標是 ${sh}，${S.topId} 站上排才能讓兩組各有一個目標）`:'';
+    return `新北在畫面的<b>${['上','右','下','左'][S.k]}</b>方（缺角在左下）。你 ${u.stacks0} 檔${u.share?'、爆炸目標':''} → 站「<b>${SPOTS[i].n}</b>」${why}，移動命令要往新北的${DN[w]}走；${u.num} 倍${u.spin>0?'順':'逆'}時針 = 淨轉${(u.num===5)===(u.spin>0)?'順':'逆'}時針 90°，所以倒數期間面向畫面的<b>${['上','右','下','左'][sdir(f)]}</b>。`;}
+};
+
+/* ---- 4. 立體 ---- */
+MODES.cube={
+  tab:'暴雷戰術：立體',title:'暴雷戰術：立體',tick:true,obs:6,end:9,pad:false,
+  desc:`<ul><li>白球在右上角 → 找到新北。地板沿箭頭前進：碰到白球 = 全場 AOE（每人 -1 層），碰到紅色立方體 = 十字 AOE（整行＋整列，-1 層）。</li>
+  <li>每橫排被十字掃到的次數由上而下是 1 / 1 / 1 / 2 / 1。中間那一列沒有立方體也不會有地板。</li>
+  <li>沒有火層時再被打 = 倒地；結束時還有火層 = 團滅。</li>
+  <li>1、2 層站第 3 排，3、4 層站第 4 排。1 層在第 2 排爆炸後往前一格；4 層吃兩下十字後往後一格吃第三下。</li></ul>
+  <p>點格子移動，每拍走一格。</p>`,
+  setup(){
+    S=base('cube');S.k=G.rotate?rnd(4):0;
+    S.arrows=ARROWS_X;S.orbs=[{r:1,c:4,gone:false}];S.cubes=CUBES.map(([r,c])=>({r,c,gone:false}));
+    const st=shuffle([1,2,3,4]);const starts=shuffle([[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,1],[3,2],[3,3]]);
+    S.players.forEach((p,i)=>{p.stacks=p.stacks0=st[i];[p.r,p.c]=starts[i];});
+    log('暴雷戰術：立體。白球、箭頭、紅色立方體出現。');
+  },
+  bot(p,t){if(t<-3)return null;const b={1:[2,2],2:[2,2],3:[3,2],4:[3,2]}[p.stacks0];
+    if(p.stacks0===1&&t>=4)return [1,2];if(p.stacks0===4&&t>=7)return [4,2];return b;},
+  hitFire(p,src){if(!p.alive)return;if(p.stacks>0){p.stacks--;log(`${p.id} 被${src}打中，火層剩 ${p.stacks}`,'ok');}else kill(p,`沒有火層時又被${src}打中`);},
+  events(t){
+    if(t<PATH_R.length)light(PATH_R[t]);if(t<PATH_L.length)light(PATH_L[t]);
+    const now=performance.now();
+    S.orbs.forEach(o=>{if(o.gone||!S.lit.has(key(o.r,o.c)))return;o.gone=true;S.fx.push({type:'flash',t0:now,dur:600});
+      log('白球爆炸：全場 AOE','info');S.players.forEach(p=>this.hitFire(p,'白球'));});
+    S.cubes.forEach(cb=>{if(cb.gone||!S.lit.has(key(cb.r,cb.c)))return;cb.gone=true;S.fx.push({type:'cross',r:cb.r,c:cb.c,t0:now,dur:650});
+      log(`第 ${cb.r+1} 排的立方體十字爆炸`,'info');S.players.forEach(p=>{if(p.alive&&(p.r===cb.r||p.c===cb.c))this.hitFire(p,'十字');});});
+  },
+  final(){S.players.forEach(p=>{if(p.alive&&p.stacks>0)log(`${p.id} 還剩 ${p.stacks} 層火 → 團滅`,'bad');});
+    S.wipe=S.players.some(p=>p.alive&&p.stacks>0);S.northLabel=true;},
+  buffs(){const u=user();return `<span class="chip fire">火 ${u.stacks} 層</span><span class="chip">初始 ${u.stacks0} 層</span>`;},
+  status(){return tickStatus()+`<br>火層：${S.players.map(p=>p.id+' '+p.stacks).join('、')}`;},
+  hint(){const u=user();const s=u.stacks0;
+    const t={1:'站第 3 排中間，白球消掉 1 層後，等第 2 排的立方體爆炸，再往新北前進一格（第 2 排中間）躲掉後面的十字。',
+      2:'站第 3 排中間，一步都不用動：白球 1 + 第 3 排十字 1。',
+      3:'站第 4 排中間，一步都不用動：白球 1 + 第 4 排十字 2。',
+      4:'站第 4 排中間，吃白球和兩下十字後往後退一格到第 5 排，吃第 5 排的十字。'}[s];
+    return `新北在畫面的<b>${['上','右','下','左'][S.k]}</b>方（白球在新北的右上）。你 ${s} 層：${t}`;}
+};
+
+/* ---- 5. 樹人 ---- */
+MODES.treant={
+  tab:'樹人・變換魔紋',title:'雙重爆炸・人偶召喚・變換魔紋',tick:true,obs:6,end:11,pad:false,
+  desc:`<ul><li>以箭頭為北，三隻樹人一定在左邊：第一排一定有一隻，另外兩隻在 2、4 排或 3、5 排。樹人朝自己面向放整排直線 AOE。</li>
+  <li>T、D1 上半場，H、D2 下半場，在沒有樹人的橫排待機，避開地板。</li>
+  <li>地板走到南邊後樹人放 AOE，接著鑽進樹人剛打過的橫排；地板會拐彎蓋住其他排。</li>
+  <li>兩個 DPS 帶分攤：T+D1、H+D2 二二分攤，兩組不能重疊。</li></ul>
+  <p>收尾的「地板拐彎、角落放黃圈」只有文字描述，這裡簡化成：拐彎蓋住沒有樹人的橫排，最後二二分攤。</p>`,
+  setup(){
+    S=base('treant');S.k=G.rotate?rnd(4):0;
+    S.variant=rnd(2);S.treantRows=S.variant?[0,2,4]:[0,1,3];S.treants=S.treantRows.map(r=>({r,fired:false}));
+    S.arrows=[{r:0,c:3,d:3,start:1},{r:0,c:4,d:2,start:1},{r:0,c:1,d:2}];
+    const starts=shuffle([[1,2],[1,3],[2,2],[2,3],[3,2],[3,3]]);
+    S.players.forEach((p,i)=>{[p.r,p.c]=starts[i];p.share=(p.id==='D1'||p.id==='D2');});
+    log('箭頭和樹人出現，兩個 DPS 身上有分攤。');
+  },
+  rows(){return S.variant?{up:[1,2],low:[3,4]}:{up:[2,1],low:[4,3]};},
+  bot(p,t){if(t<-3)return null;const up=p.id==='T'||p.id==='D1';const R=this.rows()[up?'up':'low'];
+    return [t>=8?R[1]:R[0],(p.id==='T'||p.id==='H')?2:3];},
+  events(t){const now=performance.now();
+    if(t<TR_A.length)light(TR_A[t]);if(t<TR_B.length)light(TR_B[t]);
+    if(t===7){S.treants.forEach(tr=>{tr.fired=true;S.fx.push({type:'beam',r:tr.r,t0:now,dur:700});});log('樹人放直線 AOE！','info');
+      S.players.forEach(p=>{if(p.alive&&S.treantRows.includes(p.r))kill(p,'被樹人直線打中');});}
+    if(t===9){for(let r=0;r<5;r++)if(!S.treantRows.includes(r)){light([r,2]);light([r,3]);}log('地板拐彎，蓋住沒有樹人的橫排。','info');}
+    if(t===11){S.fx.push({type:'stackfx',t0:now,dur:700,both:true});
+      ['D1','D2'].forEach(id=>{const d=S.players.find(p=>p.id===id);if(!d.alive)return;
+        const g=S.players.filter(p=>p.alive&&cheb(p,d)<=1);const other=S.players.find(p=>p.id===(id==='D1'?'D2':'D1'));
+        if(other.alive&&cheb(other,d)<=1){S.overlap=true;}
+        else if(g.length<2){kill(d,'分攤只有自己吃');}
+        else if(g.length>2){log(`${id} 的分攤擠了 ${g.length} 人，不是二二分攤`,'bad');S.badSplit=true;}
+        else log(`${id} 的分攤由 ${g.map(p=>p.id).join('+')} 吃下`,'ok');});
+      if(S.overlap){log('兩組分攤重疊','bad');S.players.forEach(p=>{if(p.alive&&(cheb(p,S.players[1])<=1||cheb(p,S.players[3])<=1))kill(p,'兩組分攤疊在一起');});}}
+  },
+  final(){S.northLabel=true;if(S.badSplit)S.wipe=true;},
+  buffs(){const u=user();const up=u.id==='T'||u.id==='D1';return `<span class="chip">${up?'上半場':'下半場'}</span>${u.share?'<span class="chip share">分攤</span>':'<span class="chip">跟 '+(up?'D1':'D2')+' 分攤</span>'}`;},
+  status(){return tickStatus()+`<br>樹人在第 ${S.treantRows.map(r=>r+1).join('、')} 排`;},
+  hint(){const R=this.rows();const u=user();const up=u.id==='T'||u.id==='D1';const r=R[up?'up':'low'];
+    return `新北在畫面的<b>${['上','右','下','左'][S.k]}</b>方（箭頭朝向的那邊是北，樹人在左）。樹人在第 ${S.treantRows.map(x=>x+1).join('、')} 排 → 你在第 <b>${r[0]+1}</b> 排待機（中間兩格），樹人打完立刻移到第 <b>${r[1]+1}</b> 排，跟${up?'T/D1':'H/D2'}站相鄰格分攤。`;}
+};
+
+/* ======================= tick engine ======================= */
+function tickStatus(){
+  const t=S.t;let s='';
+  if(S.state==='ready')s='按「開始」。開打前有 6 拍可以走位。';
+  else if(S.state==='run')s=t<0?`觀察中，還有 ${-t} 拍開打`:`第 ${t} 拍 / ${MODES[S.mode].end}`;
+  else s='結束';
+  if(S.cast&&S.state==='run'){const pct=clamp((t-S.cast.tick0)/S.cast.len,0,1)*100;s+=`<br>Boss 讀條：${S.cast.name}<div class="castbar"><i style="width:${pct}%"></i></div>`;}
+  return s;
+}
+function step(){
+  const m=MODES[S.mode],t=S.t;
+  S.players.forEach(p=>{if(!p.alive)return;
+    if(!p.isUser){const tg=m.bot(p,t);if(tg){p.tr=tg[0];p.tc=tg[1];}if(m.botFace){const f=m.botFace(p,t);if(f!=null){if(p.fa!=null)p.fa=f;else p.facing=f;}}}
+    if(p.tr!=null&&(p.tr!==p.r||p.tc!==p.c))setMove(p,p.r+Math.sign(p.tr-p.r),p.c+Math.sign(p.tc-p.c),Math.min(320,G.speed*.4));
+  });
+  if(t>=0)m.events(t);
+  S.players.forEach(p=>{if(p.alive&&S.lit.has(key(p.r,p.c)))kill(p,'踩到地板 AOE');});
+  S.t++;S.dirtyPanel=true;
+  if(S.t>m.end){m.final&&m.final();finish();}
+}
+function finish(){
+  clearInterval(timer);timer=null;S.state='done';
+  const u=user();const allAlive=S.players.every(p=>p.alive);
+  let ok=u.alive&&allAlive&&!S.wipe;
+  S.result={ok,txt:ok?'全員存活':(S.wipe?'團滅':(!u.alive?'你倒地了':'有隊友倒地')),sub:!u.alive?u.why:(S.wipe?'有人火層沒清乾淨或分攤失敗':'')};
+  log(ok?'成功！':'失敗：'+S.result.txt,ok?'ok':'bad');S.northLabel=true;S.dirtyPanel=true;
+}
+
+/* ======================= rendering ======================= */
+function arrowPath(fill,stroke){return `<path d="M0,-22 L17,-3 L6,-3 L6,20 L-6,20 L-6,-3 L-17,-3 Z" fill="${fill}" stroke="${stroke}" stroke-width="3" stroke-linejoin="round"/>`;}
+function fanPath(cx,cy,R,a1,a2){const p=a=>[cx+R*Math.sin(a*Math.PI/180),cy-R*Math.cos(a*Math.PI/180)];const [x1,y1]=p(a1),[x2,y2]=p(a2);
+  return `M${cx},${cy} L${x1},${y1} A${R},${R} 0 ${a2-a1>180?1:0} 1 ${x2},${y2} Z`;}
+function arcPath(cx,cy,R,a1,a2){const p=a=>[cx+R*Math.sin(a*Math.PI/180),cy-R*Math.cos(a*Math.PI/180)];const [x1,y1]=p(a1),[x2,y2]=p(a2);
+  return `M${x1},${y1} A${R},${R} 0 ${a2-a1>180?1:0} 1 ${x2},${y2}`;}
+function cellRect(r,c,attrs){const [sr,sc]=toS(r,c);return `<rect x="${M+sc*CELL+2}" y="${M+sr*CELL+2}" width="${CELL-4}" height="${CELL-4}" rx="4" ${attrs}/>`;}
+function ease(t){return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
+function ppos(p,now){if(p.mv){const t=clamp((now-p.mv.t0)/p.mv.dur,0,1);if(t>=1)p.mv=null;else{const e=ease(t);return px(lerp(p.mv.fr,p.r,e),lerp(p.mv.fc,p.c,e));}}return px(p.r,p.c);}
+const baseAng=p=>p.fa!=null?p.fa+S.k*90:sdir(p.facing)*90;
+function pang(p,now){if(p.rot){const t=clamp((now-p.rot.t0)/p.rot.dur,0,1);if(t>=1){p.rot=null;}else return lerp(p.rot.a0,p.rot.a1,ease(t));}return baseAng(p);}
+
+function render(now){
+  let h=`<defs><radialGradient id="orbG" cx=".38" cy=".35" r=".7"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#d9e4ea"/><stop offset="1" stop-color="#8aa0ad"/></radialGradient>
+  <pattern id="plank" width="${CELL}" height="12" patternUnits="userSpaceOnUse"><rect width="${CELL}" height="12" fill="#3d3322"/><rect y="11" width="${CELL}" height="1" fill="#2c2418"/></pattern></defs>`;
+  const L=M,Rr=M+N*CELL;
+  h+=`<rect x="${L-18}" y="${L-18}" width="${N*CELL+36}" height="${N*CELL+36}" rx="22" fill="#5b4a2c"/>`;
+  h+=`<rect x="${L}" y="${L}" width="${N*CELL}" height="${N*CELL}" fill="url(#plank)"/>`;
+  for(let i=0;i<=N;i++){h+=`<line x1="${L+i*CELL}" y1="${L}" x2="${L+i*CELL}" y2="${Rr}" stroke="#6e5c3a" stroke-width="2"/><line x1="${L}" y1="${L+i*CELL}" x2="${Rr}" y2="${L+i*CELL}" stroke="#6e5c3a" stroke-width="2"/>`;}
+  // waymarks are fixed to the real arena (not rotated)
+  [['A',1,2,'#ff5a64'],['B',2,3,'#ffe066'],['C',3,2,'#6fb5ff'],['D',2,1,'#d9a6ff']].forEach(([t,r,c,col])=>{
+    h+=`<text x="${M+(c+.5)*CELL}" y="${M+(r+.5)*CELL+9}" text-anchor="middle" font-size="26" font-weight="900" fill="${col}" opacity=".32" font-family="serif">${t}</text>`;});
+  // fire tiles
+  if(S.fire)S.fire.forEach((used,k)=>{const [r,c]=k.split(',').map(Number);
+    h+=cellRect(r,c,used?'fill="#3a3226" stroke="#5a4a34" stroke-width="2"':'fill="#e9c25a" fill-opacity=".55" stroke="#ffe08a" stroke-width="2"');
+    if(!used){const [x,y]=px(r,c);h+=`<g transform="translate(${x},${y})"><path d="M0,-15 L0,15 M-15,0 L15,0 M-10,-10 L10,10 M10,-10 L-10,10" stroke="#5a3a14" stroke-width="3"/><circle r="9" fill="#7a2c1c" stroke="#ffd29a" stroke-width="2"/></g>`;}});
+  // spots
+  if(S.spots&&(S.state==='ready'||S.state==='count'))S.spots.forEach((s,i)=>{const [x,y]=px(s.r,s.c);h+=`<circle cx="${x}" cy="${y}" r="17" fill="rgba(233,189,82,.12)" stroke="#e9bd52" stroke-dasharray="4 3" stroke-width="2"/><text x="${x}" y="${y+5}" text-anchor="middle" font-size="13" font-weight="700" fill="#e9bd52">${i+1}</text>`;});
+  // floor aoe
+  S.lit.forEach(k=>{const [r,c]=k.split(',').map(Number);h+=cellRect(r,c,'fill="#56bfe6" fill-opacity=".55" stroke="#9fe2ff" stroke-width="2"');});
+  // arrows
+  S.arrows.forEach(a=>{const [x,y]=px(a.r,a.c);
+    if(a.start&&!S.lit.has(key(a.r,a.c)))h+=cellRect(a.r,a.c,'fill="#3aa6c8" fill-opacity=".75" stroke="#a6e6ff" stroke-width="2"');
+    h+=`<g transform="translate(${x},${y}) rotate(${sdir(a.d)*90})">${a.start?arrowPath('none','#f2cf4a')+'<circle cy="-4" r="8" fill="none" stroke="#f2cf4a" stroke-width="3"/>':arrowPath('none','#eef4f6')}</g>`;});
+  // cubes
+  S.cubes.forEach(cb=>{if(cb.gone)return;const [x,y]=px(cb.r,cb.c);
+    h+=`<g transform="translate(${x},${y})"><circle r="25" fill="#ff7a2a" opacity=".35"/><path d="M0,-17 L16,-8 L16,10 L0,19 L-16,10 L-16,-8 Z" fill="#c9581f" stroke="#ffd29a" stroke-width="2"/><path d="M-16,-8 L0,1 L16,-8 M0,1 L0,19" stroke="#ffd29a" stroke-width="2" fill="none"/></g>`;});
+  // orbs
+  S.orbs.forEach(o=>{if(o.gone)return;const [x,y]=px(o.r,o.c);h+=`<ellipse cx="${x}" cy="${y+16}" rx="18" ry="6" fill="#c2378a" opacity=".7"/><circle cx="${x}" cy="${y}" r="18" fill="url(#orbG)"/>`;});
+  // treants
+  S.treants.forEach(tr=>{const [x,y]=px(tr.r,-1);const [x2,y2]=px(tr.r,0);const ang=Math.atan2(y2-y,x2-x);
+    h+=`<g transform="translate(${x},${y})"><circle r="22" fill="#3f8a3a" stroke="#9ad46b" stroke-width="2"/><circle cx="-6" cy="-4" r="3" fill="#e6ff9a"/><circle cx="6" cy="-4" r="3" fill="#e6ff9a"/><path d="M-7,8 Q0,3 7,8" stroke="#1f3a1c" stroke-width="2" fill="none"/>
+    <path transform="rotate(${ang*180/Math.PI})" d="M26,-6 L36,0 L26,6 Z" fill="#9ad46b"/></g>`;});
+  // boss
+  if(S.boss){const b=S.boss;const [x,y]=px(b.r,b.c);
+    if(b.show==='cannon'){let a=b.ang;if(b.rot){const t=clamp((now-b.rot.t0)/b.rot.dur,0,1);a=lerp(b.rot.a0,b.rot.a1,t);}
+      const fire=S.fx.find(f=>f.type==='fan');
+      h+=`<path d="${fanPath(x,y,CELL*3.6,a-135,a+135)}" fill="#ff4b3a" fill-opacity="${fire?.55:.16}" stroke="#ff7a6a" stroke-width="2" stroke-dasharray="${fire?'0':'6 5'}"/>`;
+      if(G.hint&&S.state!=='done'){const fa=MODES.cannon.finalFacing()*90;h+=`<path d="${fanPath(x,y,CELL*2.4,fa+135,fa+225)}" fill="#62c98f" fill-opacity=".18" stroke="#62c98f" stroke-width="2" stroke-dasharray="5 4"/>`;}
+      h+=`<g transform="translate(${x},${y})"><circle r="30" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="3"/><g transform="rotate(${a})"><path d="M0,-44 L11,-28 L-11,-28 Z" fill="#ffd36a"/></g>
+      <text y="7" text-anchor="middle" font-size="20" font-weight="900" fill="#ffd36a" font-family="serif">${roman(b.num)}</text>
+      <text y="-52" text-anchor="middle" font-size="26" fill="#ffffff">${b.spin>0?'↻':'↺'}</text></g>`;}
+    else h+=`<g transform="translate(${x},${y})"><path d="M0,-18 L20,0 L0,18 L-20,0 Z" fill="#5a2f7a" stroke="#d6b2ff" stroke-width="2"/><text y="5" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">BOSS</text></g>`;
+  }
+  // new north label
+  if(['fire','cube','treant'].includes(S.mode)&&(S.northLabel||G.hint)){const [x,y]=px(-0.72,2);h+=`<text x="${x}" y="${y+7}" text-anchor="middle" font-size="20" font-weight="900" fill="#ffffff" font-family="serif" transform="rotate(${S.k*90} ${x} ${y})">新北</text>`;}
+  // fx
+  S.fx=S.fx.filter(f=>now-f.t0<f.dur);
+  S.fx.forEach(f=>{const t=(now-f.t0)/f.dur,o=(1-t).toFixed(2);
+    if(f.type==='boom'){const [x,y]=px(f.r,f.c);h+=`<circle cx="${x}" cy="${y}" r="${20+t*120}" fill="#ffffff" fill-opacity="${o*.5}" stroke="#fff" stroke-opacity="${o}" stroke-width="3"/>`;}
+    if(f.type==='flash')h+=`<rect x="${M}" y="${M}" width="${N*CELL}" height="${N*CELL}" fill="#ffffff" opacity="${o*.55}"/>`;
+    if(f.type==='shot')h+=`<rect x="${M}" y="${M}" width="${N*CELL}" height="${N*CELL}" fill="#d6b2ff" opacity="${o*.4}"/>`;
+    if(f.type==='cross'){for(let i=0;i<5;i++){h+=cellRect(f.r,i,`fill="#ff6a2a" opacity="${o*.7}"`);if(i!==f.r)h+=cellRect(i,f.c,`fill="#ff6a2a" opacity="${o*.7}"`);}}
+    if(f.type==='beam'){for(let i=-1;i<5;i++)h+=cellRect(f.r,i,`fill="#b6ff6a" opacity="${o*.6}"`);}
+    if(f.type==='puff'){const [r,c]=f.k.split(',').map(Number);const [x,y]=px(r,c);h+=`<circle cx="${x}" cy="${y}" r="${10+t*30}" fill="#ffb35a" opacity="${o}"/>`;}
+    if(f.type==='stackfx'){const pts=f.both?S.players.filter(p=>p.share):[{r:f.r,c:f.c}];pts.forEach(p=>{const [x,y]=px(p.r,p.c);h+=`<circle cx="${x}" cy="${y}" r="${30+t*30}" fill="#b48ae8" fill-opacity="${o*.4}" stroke="#d6b2ff" stroke-width="3" stroke-opacity="${o}"/>`;});}
+  });
+  // players
+  const hintSpots=G.hint&&S.state!=='done'?hintGhost():null;
+  if(hintSpots)h+=hintSpots;
+  S.players.slice().sort((a,b)=>a.isUser-b.isUser).forEach(p=>{
+    let [x,y]=ppos(p,now);
+    // spread players sharing a cell in tick modes
+    if(MODES[S.mode].tick){const same=S.players.filter(q=>q.r===p.r&&q.c===p.c);if(same.length>1){const i=same.indexOf(p);const a=i/same.length*Math.PI*2;x+=Math.cos(a)*13;y+=Math.sin(a)*13;}}
+    const a=pang(p,now);const dead=!p.alive;const col=dead?'#5d6a6a':p.color;
+    let g=`<g transform="translate(${x},${y})" opacity="${dead?.75:1}">`;
+    if(p.isUser&&!dead)g+=`<circle r="27" fill="none" stroke="#e9bd52" stroke-width="2" opacity="${.5+.4*Math.sin(now/220)}"/>`;
+    if(p.share&&!dead)g+=`<circle r="23" fill="none" stroke="#b48ae8" stroke-width="2.5" stroke-dasharray="3 3"/>`;
+    if(p.ring&&!dead){const ga=a+p.gapOff*90;g+=`<path d="${arcPath(0,0,21,ga+32,ga+328)}" fill="none" stroke="#f3e7ff" stroke-width="4" stroke-linecap="round"/>`;}
+    g+=`<g transform="rotate(${a})"><path d="M0,-19 L6,-11 L-6,-11 Z" fill="#ffffff"/></g>`;
+    g+=`<circle r="12" fill="${col}" stroke="${p.isUser?'#e9bd52':'#0f1719'}" stroke-width="${p.isUser?3:2}"/>`;
+    g+=`<text y="4.5" text-anchor="middle" font-size="${p.id.length>1?10:12}" font-weight="700" fill="#fff">${p.id}</text>`;
+    if(dead)g+=`<path d="M-9,-9 L9,9 M9,-9 L-9,9" stroke="#ff8a7a" stroke-width="3"/>`;
+    if((S.mode==='fire'||S.mode==='cube')&&p.alive&&p.stacks>0)g+=`<g transform="translate(13,-14)"><rect x="-8" y="-8" width="16" height="16" rx="4" fill="#c8662f" stroke="#ffd29a"/><text y="4.5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">${p.stacks}</text></g>`;
+    if(p.showSpin&&p.alive)g+=`<text x="-14" y="-19" text-anchor="middle" font-size="15" fill="#ffd36a">${p.spin>0?'↻':'↺'}</text><text x="-14" y="-32" text-anchor="middle" font-size="10" font-weight="900" fill="#ffd36a">${roman(p.num)}</text>`;
+    g+='</g>';h+=g;
+  });
+  svg.innerHTML=h;
+}
+function hintGhost(){
+  const u=user();const m=S.mode;let pos=null;
+  if(m==='analysis')pos=MODES.analysis.bot(u,0);
+  else if(m==='cube'){const t=S.state==='run'?S.t:0;pos=MODES.cube.bot(u,Math.max(t,0));}
+  else if(m==='treant'){const t=S.state==='run'?S.t:0;pos=MODES.treant.bot(u,Math.max(t,0));}
+  else if(m==='fire'&&(S.state==='ready'||S.state==='count')){const i=MODES.fire.correctSpot(u);pos=[SPOTS[i].r,SPOTS[i].c];}
+  if(!pos)return '';const [x,y]=px(pos[0],pos[1]);
+  return `<circle cx="${x}" cy="${y}" r="16" fill="none" stroke="#62c98f" stroke-width="3" stroke-dasharray="4 3"/>`;
+}
+
+function renderPanel(){
+  const m=MODES[S.mode];
+  $('buffs').innerHTML=m.buffs();
+  $('status').innerHTML=m.status();
+  const hb=$('hint');hb.hidden=!G.hint;if(G.hint)hb.innerHTML='<b>解法：</b>'+m.hint();
+  const lg=$('log');if(S.dirtyPanel){lg.innerHTML=S.log.map(l=>`<div class="${l.cls}">${l.txt}</div>`).join('');lg.scrollTop=lg.scrollHeight;}
+  const bn=$('banner');if(S.result){bn.hidden=false;bn.className='banner '+(S.result.ok?'ok':'bad');bn.innerHTML=`<b>${S.result.ok?'成功':'失敗'}</b>${S.result.txt}${S.result.sub?'<br><span class="note">'+S.result.sub+'</span>':''}`;}else bn.hidden=true;
+  const sb=$('startBtn');
+  sb.textContent=S.mode==='fire'?(S.state==='count'?'跳過倒數':'開始'):S.mode==='cannon'?'開始讀條':'開始';
+  sb.disabled=!(S.state==='ready'||(S.mode==='fire'&&S.state==='count'));
+  S.dirtyPanel=false;
+}
+
+/* ======================= loop & wiring ======================= */
+let last=performance.now(),lastPanel=0;
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  const m=MODES[S.mode];if(m.frame)m.frame(now,dt);
+  render(now);
+  if(S.dirtyPanel||now-lastPanel>120){renderPanel();lastPanel=now;}
+  requestAnimationFrame(loop);
+}
+function load(tab){
+  clearInterval(timer);timer=null;G.tab=tab;const m=MODES[tab];m.setup();S.dirtyPanel=true;
+  $('mTitle').textContent=m.title;$('mDesc').innerHTML=m.desc;$('padWrap').hidden=!m.pad;
+  document.querySelectorAll('.pad .diag').forEach(b=>b.style.visibility=tab==='analysis'?'visible':'hidden');
+  $('padLbl').innerHTML=tab==='analysis'?'面向 8 方向<br>方向鍵 / Q E':'面向<br>(方向鍵)';
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab));
+  try{localStorage.setItem('erwang-tab',tab);}catch(e){}
+  renderPanel();
+}
+function start(){const m=MODES[S.mode];
+  if(m.tick){if(S.state!=='ready')return;S.state='run';S.t=-m.obs;log('開始！');timer=setInterval(step,G.speed);}
+  else m.start();
+  renderPanel();}
+function setFacing(a){if(!S||S.state==='done')return;const u=user();if(!u.alive||u.locked)return;
+  if(S.mode==='fire'&&S.state!=='ready'&&S.state!=='count')return;
+  a=((a%360)+360)%360;
+  if(u.fa!=null){u.fa=(a-S.k*90+360)%360;}else{if(a%90)return;u.facing=fdir(a/90);}
+  S.dirtyPanel=true;}
+
+const tabs=$('tabs');
+Object.entries(MODES).forEach(([k,m],i)=>{const b=document.createElement('button');b.role='tab';b.dataset.tab=k;b.innerHTML=`<span>${i+1}</span>${m.tab}`;b.onclick=()=>load(k);tabs.appendChild(b);});
+$('startBtn').onclick=start;
+$('resetBtn').onclick=()=>load(G.tab);
+document.querySelectorAll('#roleSeg button').forEach(b=>b.onclick=()=>{G.role=b.dataset.role;document.querySelectorAll('#roleSeg button').forEach(x=>x.setAttribute('aria-pressed',x===b));load(G.tab);});
+$('speed').onchange=e=>{G.speed=+e.target.value;};
+$('rotChk').onchange=e=>{G.rotate=e.target.checked;load(G.tab);};
+$('hintChk').onchange=e=>{G.hint=e.target.checked;S.dirtyPanel=true;};
+document.querySelectorAll('.pad button').forEach(b=>b.onclick=()=>setFacing(+b.dataset.a));
+const held=new Set();
+document.addEventListener('keyup',e=>held.delete(e.key));
+document.addEventListener('keydown',e=>{if(!MODES[G.tab].pad)return;
+  const V={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+  if(e.key in V){e.preventDefault();held.add(e.key);let x=0,y=0;held.forEach(k=>{if(V[k]){x+=V[k][0];y+=V[k][1];}});
+    if(x||y)setFacing(Math.round((Math.atan2(x,-y)*180/Math.PI+360)%360));return;}
+  const u=S&&user();if(u&&u.fa!=null&&(e.key==='q'||e.key==='Q'||e.key==='e'||e.key==='E')){setFacing(u.fa+S.k*90+((e.key==='e'||e.key==='E')?45:-45));}});
+svg.addEventListener('pointerdown',e=>{
+  const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform(svg.getScreenCTM().inverse());
+  const sr=(q.y-M)/CELL-.5,sc=(q.x-M)/CELL-.5;const [fr,fc]=toF(sr,sc);const m=MODES[S.mode];
+  if(m.click){m.click(fr,fc);return;}
+  if(m.tick&&S.state!=='done'){const u=user();if(!u.alive)return;const r=Math.round(fr),c=Math.round(fc);
+    if(r<0||r>4||c<0||c>4)return;u.tr=r;u.tc=c;
+    if(S.state==='ready'){setMove(u,r,c,200);}}
+});
+function boot(data){
+  let initTab='cannon';try{const v=localStorage.getItem('erwang-tab');if(v&&MODES[v])initTab=v;}catch(e){}
+  if(data&&data.G){Object.assign(G,data.G);if(MODES[G.tab])initTab=G.tab;}
+  document.querySelectorAll('#roleSeg button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.role===G.role));
+  $('speed').value=String(G.speed);$('rotChk').checked=G.rotate;$('hintChk').checked=G.hint;
+  load(initTab);requestAnimationFrame(loop);
+}
+window.claude?.hot?.snapshot?.(()=>({G:{...G}}));
+window.claude?.hot?.ready?window.claude.hot.ready(boot):boot(window.claude?.hot?.data??{});
+</script>
+
+</body>
+</html>
